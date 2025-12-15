@@ -12,7 +12,7 @@ interface GroupContextType {
 const GroupContext = createContext<GroupContextType | undefined>(undefined);
 
 export function GroupProvider({ children }: { children: React.ReactNode }) {
-  const [groupType, setGroupType] = useState<GroupType>("outbound");
+  const [groupType, setGroupType] = useState<GroupType>("inbound");
   const [loading] = useState(false);
 
   // Toggle between inbound and outbound (manual override always allowed)
