@@ -1,11 +1,18 @@
 import { useState, useCallback } from 'react';
 import { ZapierIntegration } from '@/lib/zapier';
-import { supabase } from '@/lib/supabase';
+import { mysqlApi } from '@/lib/mysql-api';
 import { toast } from 'sonner';
 
 interface UseZapierOptions {
   showToasts?: boolean;
   validateData?: boolean;
+}
+
+interface ZapierWebhook {
+  id: number;
+  webhook_url: string;
+  webhook_name: string | null;
+  is_active: boolean;
 }
 
 export const useZapier = (options: UseZapierOptions = {}) => {
@@ -49,12 +56,8 @@ export const useZapier = (options: UseZapierOptions = {}) => {
     setError(null);
 
     try {
-      const { data: webhooks, error: fetchError } = await supabase
-        .from('zapier_settings')
-        .select('*')
-        .eq('is_active', true);
-
-      if (fetchError) throw fetchError;
+      const allWebhooks = await mysqlApi.fetchAll<ZapierWebhook>('zapier_settings');
+      const webhooks = allWebhooks.filter(w => w.is_active);
 
       if (!webhooks || webhooks.length === 0) {
         throw new Error('No active webhooks configured');

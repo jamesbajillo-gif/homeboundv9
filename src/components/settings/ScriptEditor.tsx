@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/lib/supabase";
+import { mysqlApi } from "@/lib/mysql-api";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 interface ScriptSection {
-  id: string;
+  id: number;
   step_name: string;
   title: string;
   content: string;
@@ -48,13 +48,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
     try {
       console.log("Fetching section for step_name:", stepName);
       
-      const { data, error } = await supabase
-        .from("homebound_script")
-        .select("*")
-        .eq("step_name", stepName)
-        .maybeSingle();
-
-      if (error) throw error;
+      const data = await mysqlApi.fetchOneWhere<ScriptSection>("homebound_script", { step_name: stepName });
 
       console.log("Fetched section:", data ? {
         id: data.id,
@@ -92,11 +86,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
       console.log("Content length:", content.length);
       
       // Check if the record exists first
-      const { data: existingData, error: checkError } = await supabase
-        .from("homebound_script")
-        .select("*")
-        .eq("step_name", stepName)
-        .maybeSingle();
+      const existingData = await mysqlApi.fetchOneWhere<ScriptSection>("homebound_script", { step_name: stepName });
 
       console.log("Existing record:", existingData ? {
         id: existingData.id,
@@ -105,16 +95,11 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
         contentPreview: existingData.content?.substring(0, 100)
       } : "NOT FOUND");
 
-      if (checkError) throw checkError;
-
-      let saveError;
-      
       if (existingData) {
         // Record exists, update it
         const updatePayload = {
           title,
           content,
-          updated_at: new Date().toISOString(),
         };
         
         console.log("Update payload:", {
@@ -123,40 +108,18 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
           contentPreview: updatePayload.content.substring(0, 100)
         });
         
-        const { data: updateResult, error } = await supabase
-          .from("homebound_script")
-          .update(updatePayload)
-          .eq("step_name", stepName)
-          .select();
-        
-        saveError = error;
-        console.log("Update result:", updateResult ? {
-          count: updateResult.length,
-          firstRecord: updateResult[0] ? {
-            title: updateResult[0].title,
-            contentLength: updateResult[0].content?.length,
-            contentPreview: updateResult[0].content?.substring(0, 100)
-          } : null
-        } : "NO DATA RETURNED");
-        console.log("Update error:", error);
+        await mysqlApi.update("homebound_script", existingData.id, updatePayload);
+        console.log("Update completed");
       } else {
         // Record doesn't exist, insert it
-        const { data: insertResult, error } = await supabase
-          .from("homebound_script")
-          .insert({
-            step_name: stepName,
-            title,
-            content,
-            button_config: [],
-          })
-          .select();
-        
-        saveError = error;
-        console.log("Insert result:", insertResult);
-        console.log("Insert error:", error);
+        await mysqlApi.create("homebound_script", {
+          step_name: stepName,
+          title,
+          content,
+          button_config: JSON.stringify([]),
+        });
+        console.log("Insert completed");
       }
-
-      if (saveError) throw saveError;
 
       console.log("=== SAVE COMPLETED, NOW FETCHING ===");
       toast.success("Section saved successfully!");

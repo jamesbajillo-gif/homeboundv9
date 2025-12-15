@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/lib/supabase";
+import { mysqlApi } from "@/lib/mysql-api";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,7 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface UserGroup {
-  id: string;
+  id: number;
   user_identifier: string;
   group_type: "inbound" | "outbound";
 }
@@ -42,14 +42,11 @@ export const UserGroupSettings = () => {
   const fetchUserGroups = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("user_groups")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      setUsers(data || []);
+      const data = await mysqlApi.fetchAll<UserGroup>("user_groups");
+      
+      // Sort by id descending (newest first)
+      const sortedData = data.sort((a, b) => b.id - a.id);
+      setUsers(sortedData);
     } catch (error) {
       console.error("Error fetching user groups:", error);
       toast.error("Failed to load user groups");
@@ -67,14 +64,10 @@ export const UserGroupSettings = () => {
     try {
       setAdding(true);
 
-      const { error } = await supabase
-        .from("user_groups")
-        .insert({
-          user_identifier: newUserIdentifier.trim(),
-          group_type: newGroupType,
-        });
-
-      if (error) throw error;
+      await mysqlApi.create("user_groups", {
+        user_identifier: newUserIdentifier.trim(),
+        group_type: newGroupType,
+      });
 
       toast.success("User added successfully!");
       setNewUserIdentifier("");
@@ -82,7 +75,7 @@ export const UserGroupSettings = () => {
       fetchUserGroups();
     } catch (error: any) {
       console.error("Error adding user:", error);
-      if (error.code === "23505") {
+      if (error.message?.includes('Duplicate')) {
         toast.error("User identifier already exists");
       } else {
         toast.error("Failed to add user");
@@ -92,14 +85,9 @@ export const UserGroupSettings = () => {
     }
   };
 
-  const handleRemoveUser = async (id: string, userIdentifier: string) => {
+  const handleRemoveUser = async (id: number, userIdentifier: string) => {
     try {
-      const { error } = await supabase
-        .from("user_groups")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await mysqlApi.delete("user_groups", id);
 
       toast.success(`User "${userIdentifier}" removed successfully!`);
       fetchUserGroups();
@@ -109,7 +97,7 @@ export const UserGroupSettings = () => {
     }
   };
 
-  if (loading) {
+  if (loading && users.length === 0) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
