@@ -1,9 +1,9 @@
 /**
  * MySQL REST API Client
- * Wrapper for http://db.techpinoy.com/api/api.php
+ * Wrapper for https://db.techpinoy.com/api/api.php
  */
 
-const API_BASE_URL = 'http://db.techpinoy.com/api/api.php';
+const API_BASE_URL = 'https://db.techpinoy.com/api/api.php';
 
 interface ApiResponse<T = any> {
   success: boolean;
