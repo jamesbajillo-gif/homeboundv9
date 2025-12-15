@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { mysqlApi } from '@/lib/mysql-api';
 
 export interface FormField {
-  id: string;
+  id: number;
   field_name: string;
   field_label: string;
   field_type: string;
@@ -29,15 +29,14 @@ export const useQualificationFields = () => {
   const fetchFields = async () => {
     try {
       setLoading(true);
-      const { data, error: fetchError } = await supabase
-        .from('qualification_form_fields')
-        .select('*')
-        .eq('is_active', true)
-        .order('display_order', { ascending: true });
+      const allFields = await mysqlApi.fetchAll<FormField>('qualification_form_fields');
+      
+      // Filter active fields and sort by display_order
+      const activeFields = allFields
+        .filter(field => field.is_active)
+        .sort((a, b) => a.display_order - b.display_order);
 
-      if (fetchError) throw fetchError;
-
-      setFields(data || []);
+      setFields(activeFields);
     } catch (err: any) {
       console.error('Error fetching qualification fields:', err);
       setError(err.message);

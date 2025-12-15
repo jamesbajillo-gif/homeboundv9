@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QualificationForm } from "@/components/QualificationForm";
-import { supabase } from "@/lib/supabase";
+import { mysqlApi } from "@/lib/mysql-api";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -41,12 +41,16 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
 
       console.log("Fetching scripts for group:", groupType, "Step mapping:", stepMapping);
 
-      const { data, error } = await supabase
-        .from("homebound_script")
-        .select("*")
-        .in("step_name", Object.values(stepMapping));
+      const allScripts = await mysqlApi.fetchAll<{
+        id: number;
+        step_name: string;
+        title: string;
+        content: string;
+      }>("homebound_script");
 
-      if (error) throw error;
+      // Filter to only include scripts we need
+      const stepNames = Object.values(stepMapping);
+      const data = allScripts.filter(script => stepNames.includes(script.step_name));
 
       if (data) {
         const formattedData = data.reduce((acc, item) => {

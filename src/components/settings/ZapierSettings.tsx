@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
+import { mysqlApi } from "@/lib/mysql-api";
 import { toast } from "sonner";
 import { Loader2, Zap, ExternalLink, Copy, CheckCheck, Plus, Edit, Trash2, TestTube } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 
 interface ZapierWebhook {
-  id: string;
+  id: number;
   webhook_url: string;
   webhook_name: string | null;
   description: string | null;
@@ -30,7 +30,7 @@ interface ZapierWebhook {
 export const ZapierSettings = () => {
   const [webhooks, setWebhooks] = useState<ZapierWebhook[]>([]);
   const [loading, setLoading] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<ZapierWebhook | null>(null);
   const [formData, setFormData] = useState({
@@ -48,14 +48,11 @@ export const ZapierSettings = () => {
   const fetchWebhooks = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("zapier_settings")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      setWebhooks(data || []);
+      const data = await mysqlApi.fetchAll<ZapierWebhook>("zapier_settings");
+      
+      // Sort by created_at (newest first) - assuming id is auto-increment
+      const sortedData = data.sort((a, b) => b.id - a.id);
+      setWebhooks(sortedData);
     } catch (error) {
       console.error("Error fetching webhooks:", error);
       toast.error("Failed to load Zapier webhooks");
@@ -64,7 +61,7 @@ export const ZapierSettings = () => {
     }
   };
 
-  const handleCopyUrl = async (url: string, id: string) => {
+  const handleCopyUrl = async (url: string, id: number) => {
     try {
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
@@ -129,30 +126,21 @@ export const ZapierSettings = () => {
 
       if (editingWebhook) {
         // Update existing webhook
-        const { error } = await supabase
-          .from("zapier_settings")
-          .update({
-            webhook_url: trimmedUrl,
-            webhook_name: formData.webhook_name.trim() || null,
-            description: formData.description.trim() || null,
-            is_active: formData.is_active,
-          })
-          .eq("id", editingWebhook.id);
-
-        if (error) throw error;
+        await mysqlApi.update("zapier_settings", editingWebhook.id, {
+          webhook_url: trimmedUrl,
+          webhook_name: formData.webhook_name.trim() || null,
+          description: formData.description.trim() || null,
+          is_active: formData.is_active ? 1 : 0,
+        });
         toast.success("Webhook updated successfully!");
       } else {
         // Add new webhook
-        const { error } = await supabase
-          .from("zapier_settings")
-          .insert([{
-            webhook_url: trimmedUrl,
-            webhook_name: formData.webhook_name.trim() || null,
-            description: formData.description.trim() || null,
-            is_active: formData.is_active,
-          }]);
-
-        if (error) throw error;
+        await mysqlApi.create("zapier_settings", {
+          webhook_url: trimmedUrl,
+          webhook_name: formData.webhook_name.trim() || null,
+          description: formData.description.trim() || null,
+          is_active: formData.is_active ? 1 : 0,
+        });
         toast.success("Webhook added successfully!");
       }
 
@@ -160,7 +148,7 @@ export const ZapierSettings = () => {
       fetchWebhooks();
     } catch (error: any) {
       console.error("Error saving webhook:", error);
-      if (error.code === '23505') {
+      if (error.message?.includes('Duplicate')) {
         toast.error("A webhook with this URL already exists");
       } else {
         toast.error("Failed to save webhook");
@@ -170,19 +158,14 @@ export const ZapierSettings = () => {
     }
   };
 
-  const handleDeleteWebhook = async (id: string) => {
+  const handleDeleteWebhook = async (id: number) => {
     if (!confirm("Are you sure you want to delete this webhook?")) {
       return;
     }
 
     try {
       setLoading(true);
-      const { error } = await supabase
-        .from("zapier_settings")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await mysqlApi.delete("zapier_settings", id);
       toast.success("Webhook deleted successfully!");
       fetchWebhooks();
     } catch (error: any) {
@@ -195,12 +178,9 @@ export const ZapierSettings = () => {
 
   const handleToggleActive = async (webhook: ZapierWebhook) => {
     try {
-      const { error } = await supabase
-        .from("zapier_settings")
-        .update({ is_active: !webhook.is_active })
-        .eq("id", webhook.id);
-
-      if (error) throw error;
+      await mysqlApi.update("zapier_settings", webhook.id, { 
+        is_active: !webhook.is_active ? 1 : 0 
+      });
       toast.success(`Webhook ${!webhook.is_active ? 'activated' : 'deactivated'}`);
       fetchWebhooks();
     } catch (error: any) {
@@ -257,7 +237,7 @@ export const ZapierSettings = () => {
     }
   };
 
-  if (loading) {
+  if (loading && webhooks.length === 0) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
