@@ -295,7 +295,16 @@ export const QualificationScriptSelector = ({
                                       }
                                       className="mt-0.5"
                                     />
-                                    <span className="text-sm">{question.question}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-sm">{question.question}</span>
+                                      {question.zapierFieldName && (
+                                        <div className="flex items-center gap-1 mt-1">
+                                          <Badge variant="outline" className="text-[10px] h-4 font-mono">
+                                            {question.zapierFieldName}
+                                          </Badge>
+                                        </div>
+                                      )}
+                                    </div>
                                   </label>
                                 ))}
                                 {enabledQuestions.length === 0 && (
