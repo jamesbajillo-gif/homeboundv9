@@ -23,15 +23,15 @@ export const useQualificationConfig = () => {
     queryKey: [...QUERY_KEYS.scripts.byStep(configKey)],
     queryFn: async (): Promise<QualificationConfig> => {
       try {
-        // First try to load from new config format
-        const configData = await mysqlApi.findOneByField<{ key_name: string; key_value: string }>(
+        // First try to load from new config format using correct column names
+        const configData = await mysqlApi.findOneByField<{ setting_key: string; setting_value: string }>(
           'homebound_app_settings',
-          'key_name',
+          'setting_key',
           configKey
         );
 
-        if (configData?.key_value) {
-          const parsed = deserializeConfig(configData.key_value);
+        if (configData?.setting_value) {
+          const parsed = deserializeConfig(configData.setting_value);
           if (parsed) {
             return parsed;
           }
@@ -69,25 +69,13 @@ export const useQualificationConfig = () => {
     mutationFn: async (newConfig: QualificationConfig) => {
       const serialized = serializeConfig(newConfig);
       
-      // Check if config exists
-      const existing = await mysqlApi.findOneByField<{ id: number }>(
-        'homebound_app_settings',
-        'key_name',
-        configKey
-      );
-
-      if (existing) {
-        await mysqlApi.updateById('homebound_app_settings', existing.id, {
-          key_value: serialized,
-        });
-      } else {
-        await mysqlApi.create('homebound_app_settings', {
-          key_name: configKey,
-          key_value: serialized,
-          key_type: 'json',
-          description: `Qualification form config for ${groupType}`,
-        });
-      }
+      // Use upsert for cleaner save - will insert or update based on setting_key uniqueness
+      await mysqlApi.upsertByFields('homebound_app_settings', {
+        setting_key: configKey,
+        setting_value: serialized,
+        setting_type: 'json',
+        description: `Qualification form config for ${groupType}`,
+      }, 'setting_key');
 
       return newConfig;
     },
