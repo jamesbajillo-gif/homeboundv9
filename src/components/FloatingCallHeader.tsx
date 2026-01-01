@@ -97,19 +97,19 @@ export const FloatingCallHeader = () => {
         {/* Main Header Row - Clickable */}
         <div 
           className={cn(
-            "max-w-full mx-auto px-2 sm:px-4 cursor-pointer transition-colors",
+            "max-w-full mx-auto px-2 sm:px-4 md:px-6 lg:px-8 cursor-pointer transition-colors",
             "hover:bg-muted/50",
             isExpanded && "bg-muted/30"
           )}
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <div className="flex items-center justify-between h-12 gap-2 sm:gap-3">
+          <div className="flex items-center justify-between h-12 md:h-14 gap-2 sm:gap-3 md:gap-4">
             {/* Call Status & Info - Left Side */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-              <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 min-w-0 flex-1">
+              <div className="flex items-center gap-1 md:gap-1.5">
                 <div
                   className={cn(
-                    "w-2 h-2 rounded-full animate-pulse",
+                    "w-2 h-2 md:w-2.5 md:h-2.5 rounded-full animate-pulse",
                     callStatus === "active" && "bg-call-active",
                     callStatus === "idle" && "bg-muted-foreground"
                   )}
@@ -117,7 +117,7 @@ export const FloatingCallHeader = () => {
                 <Badge
                   variant="outline"
                   className={cn(
-                    "font-medium text-xs",
+                    "font-medium text-xs md:text-sm",
                     callStatus === "active" && "border-call-active text-call-active"
                   )}
                 >
@@ -128,15 +128,15 @@ export const FloatingCallHeader = () => {
 
               {callStatus !== "idle" && (
                 <>
-                  <div className="h-4 w-px bg-border" />
-                  <div className="flex items-center gap-1.5 min-w-0 text-xs sm:text-sm">
-                    <span className="font-medium text-foreground truncate">{customerName}</span>
+                  <div className="h-4 md:h-5 w-px bg-border" />
+                  <div className="flex items-center gap-1.5 md:gap-2 min-w-0 text-xs sm:text-sm md:text-base">
+                    <span className="font-medium text-foreground truncate max-w-[80px] sm:max-w-[160px] md:max-w-[240px]">{customerName}</span>
                     <span className="text-muted-foreground">•</span>
                     <span className="text-muted-foreground truncate">{phoneNumber}</span>
                     {address && (
                       <>
-                        <span className="text-muted-foreground">•</span>
-                        <span className="text-muted-foreground truncate">{address}</span>
+                        <span className="text-muted-foreground hidden md:inline">•</span>
+                        <span className="text-muted-foreground truncate hidden md:inline">{address}</span>
                       </>
                     )}
                   </div>
@@ -146,20 +146,20 @@ export const FloatingCallHeader = () => {
             
             {/* Date/Time and Group Toggle - Right Side */}
             {callStatus !== "idle" && (
-              <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
                 <GroupToggle />
-                <div className="h-4 w-px bg-border" />
+                <div className="h-4 md:h-5 w-px bg-border" />
                 <div className="flex flex-col items-end">
-                  <div className="text-xs sm:text-sm font-medium text-foreground">{getCurrentDate()}</div>
-                  <div className="text-[10px] font-mono text-muted-foreground">{getPSTTime()} PST</div>
+                  <div className="text-xs sm:text-sm md:text-base font-medium text-foreground">{getCurrentDate()}</div>
+                  <div className="text-[10px] md:text-xs font-mono text-muted-foreground">{getPSTTime()} PST</div>
                 </div>
                 {/* Expand/Collapse Icon */}
-                <div className="h-4 w-px bg-border" />
+                <div className="h-4 md:h-5 w-px bg-border" />
                 <div className="flex items-center">
                   {isExpanded ? (
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    <ChevronUp className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
                   ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    <ChevronDown className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
                   )}
                 </div>
               </div>
@@ -170,17 +170,17 @@ export const FloatingCallHeader = () => {
         {/* Expanded Rows - Two Additional Rows */}
         {isExpanded && callStatus !== "idle" && (
           <div className="border-t border-border bg-muted/20">
-            <div className="max-w-full mx-auto px-2 sm:px-4 py-2 space-y-2">
+            <div className="max-w-full mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-2 md:py-3 space-y-2 md:space-y-3">
               {/* First Additional Row - Always Visible */}
-              <div className="flex items-center gap-4 text-xs text-muted-foreground min-h-[20px]">
+              <div className="flex items-center gap-4 md:gap-6 text-xs md:text-sm text-muted-foreground min-h-[20px] md:min-h-[24px]">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="font-medium text-foreground">Email:</span>
                   <span className="truncate">{email || 'Not provided'}</span>
                 </div>
                 {leadId && (
                   <>
-                    <div className="h-3 w-px bg-border" />
-                    <div className="flex items-center gap-1.5">
+                    <div className="h-3 md:h-4 w-px bg-border" />
+                    <div className="flex items-center gap-1.5 md:gap-2">
                       <span className="font-medium text-foreground">Lead ID:</span>
                       <span>{leadId}</span>
                     </div>
@@ -188,8 +188,8 @@ export const FloatingCallHeader = () => {
                 )}
                 {sourceId && (
                   <>
-                    <div className="h-3 w-px bg-border" />
-                    <div className="flex items-center gap-1.5">
+                    <div className="h-3 md:h-4 w-px bg-border" />
+                    <div className="flex items-center gap-1.5 md:gap-2">
                       <span className="font-medium text-foreground">Source:</span>
                       <span>{sourceId}</span>
                     </div>
@@ -198,7 +198,7 @@ export const FloatingCallHeader = () => {
               </div>
 
               {/* Second Additional Row - Always Visible */}
-              <div className="flex items-center gap-4 text-xs text-muted-foreground min-h-[20px]">
+              <div className="flex items-center gap-4 md:gap-6 text-xs md:text-sm text-muted-foreground min-h-[20px] md:min-h-[24px]">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   <span className="font-medium text-foreground">Address:</span>
                   <span className="truncate">
@@ -207,8 +207,8 @@ export const FloatingCallHeader = () => {
                 </div>
                 {listId && (
                   <>
-                    <div className="h-3 w-px bg-border" />
-                    <div className="flex items-center gap-1.5">
+                    <div className="h-3 md:h-4 w-px bg-border" />
+                    <div className="flex items-center gap-1.5 md:gap-2">
                       <span className="font-medium text-foreground">List ID:</span>
                       <span>{listId}</span>
                     </div>
@@ -216,8 +216,8 @@ export const FloatingCallHeader = () => {
                 )}
                 {channelGroup && (
                   <>
-                    <div className="h-3 w-px bg-border" />
-                    <div className="flex items-center gap-1.5">
+                    <div className="h-3 md:h-4 w-px bg-border" />
+                    <div className="flex items-center gap-1.5 md:gap-2">
                       <span className="font-medium text-foreground">Channel:</span>
                       <span>{channelGroup}</span>
                     </div>
@@ -225,8 +225,8 @@ export const FloatingCallHeader = () => {
                 )}
                 {mortgageBalance && (
                   <>
-                    <div className="h-3 w-px bg-border" />
-                    <div className="flex items-center gap-1.5">
+                    <div className="h-3 md:h-4 w-px bg-border" />
+                    <div className="flex items-center gap-1.5 md:gap-2">
                       <span className="font-medium text-foreground">Mortgage Balance:</span>
                       <span>{mortgageBalance}</span>
                     </div>

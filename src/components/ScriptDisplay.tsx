@@ -162,9 +162,9 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
 
   if (loading) {
     return (
-      <div className="px-2 sm:px-4 pb-4">
+      <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
         <div className="max-w-full mx-auto flex items-center justify-center h-[calc(100vh-200px)]">
-          <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-primary" />
+          <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 animate-spin text-primary" />
         </div>
       </div>
     );
@@ -172,9 +172,9 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
 
   if (!scriptData) {
     return (
-      <div className="px-2 sm:px-4 pb-4">
+      <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
         <div className="max-w-full mx-auto">
-          <p className="text-center text-muted-foreground text-sm">Failed to load script data.</p>
+          <p className="text-center text-muted-foreground text-sm md:text-base">Failed to load script data.</p>
         </div>
       </div>
     );
@@ -185,14 +185,14 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
   // If current section doesn't exist, show error and fallback
   if (!currentSection) {
     return (
-      <div className="px-2 sm:px-4 pb-4">
+      <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
         <div className="max-w-full mx-auto">
-          <Card className="p-4 sm:p-6">
-            <h2 className="text-lg sm:text-xl font-semibold text-foreground mb-3">Step Not Found</h2>
-            <p className="text-muted-foreground mb-3 text-sm">
+          <Card className="p-4 sm:p-6 md:p-8">
+            <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground mb-3">Step Not Found</h2>
+            <p className="text-muted-foreground mb-3 text-sm md:text-base">
               The script step "{currentStep}" is not available in the database.
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               Please run the database migration to add missing steps.
             </p>
           </Card>
@@ -216,28 +216,28 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
   };
   
   return (
-    <div className="px-2 sm:px-4 pb-2">
+    <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-2 md:pb-4">
       <div className="max-w-full mx-auto">
         {/* List ID Script Indicator Badge */}
       {usingListIdScripts && activeListId && activeListName && (
-        <div className="mb-3 animate-fade-in">
-          <Badge variant="secondary" className="text-xs font-medium">
+        <div className="mb-3 md:mb-4 animate-fade-in">
+          <Badge variant="secondary" className="text-xs sm:text-sm font-medium">
             <span className="font-bold">{activeListId} - {activeListName}</span>
           </Badge>
         </div>
       )}
         
-        <div className="mb-2">
-          <h1 className="text-lg sm:text-xl font-bold text-foreground">{stepTitles[currentStep]}</h1>
+        <div className="mb-2 md:mb-3">
+          <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-foreground">{stepTitles[currentStep]}</h1>
         </div>
 
-        <ScrollArea className="h-[420px] [&>[data-radix-scroll-area-scrollbar]]:opacity-100">
-          <div className="pr-3 pb-24">
-            <div className="animate-fade-in pb-8">
+        <ScrollArea className="h-[420px] md:h-[calc(100vh-220px)] [&>[data-radix-scroll-area-scrollbar]]:opacity-100">
+          <div className="pr-3 pb-24 md:pb-28">
+            <div className="animate-fade-in pb-8 md:pb-10">
               {currentStep === "qualification" ? (
                 <>
-                  <div className="prose prose-sm max-w-none mb-6">
-                    <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base leading-relaxed text-foreground">
+                  <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
+                    <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
                       {processedContent}
                     </pre>
                   </div>
@@ -247,8 +247,8 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
                 />
                 </>
               ) : (
-                <div className="prose prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base leading-relaxed text-foreground">
+                <div className="prose prose-sm md:prose-base max-w-none">
+                  <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
                     {processedContent}
                   </pre>
                 </div>

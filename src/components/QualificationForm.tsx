@@ -318,9 +318,9 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
 
   return (
     <Form {...form}>
-      <form className="space-y-6">
-        <Card className="p-6 md:p-8">
-          <div className="space-y-8">
+      <form className="space-y-6 sm:space-y-8 md:space-y-10">
+        <Card className="p-4 sm:p-6 md:p-8 lg:p-10">
+          <div className="space-y-6 sm:space-y-8 md:space-y-10">
             {enabledSections
               .filter(section => section.id !== 'personal') // Hide personal section - auto-populates from VICI
               .map(section => (
