@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   DndContext,
   closestCenter,
@@ -47,7 +47,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { useQualificationConfig } from "@/hooks/useQualificationConfig";
+import { useMasterQualificationConfig } from "@/hooks/useMasterQualificationConfig";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -58,9 +58,11 @@ import {
   RotateCcw,
   FolderPlus,
   Pencil,
-  ChevronDown,
+  Download,
+  Upload,
+  FileText,
 } from "lucide-react";
-import { QualificationQuestion, QualificationSection as SectionType, FieldType, FieldOption } from "@/config/qualificationConfig";
+import { QualificationQuestion, QualificationSection as SectionType, FieldType, FieldOption, SAMPLE_QUALIFICATION_CONFIG, QualificationConfig } from "@/config/qualificationConfig";
 
 const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: "text", label: "Text" },
@@ -392,16 +394,14 @@ export const QuestionnaireSettings = () => {
     config,
     isLoading,
     isSaving,
-    updateSection,
-    updateQuestion,
-    addQuestion,
-    removeQuestion,
-    reorderQuestions,
-    addSection,
-    removeSection,
-    reorderSections,
-    resetToDefaults,
-  } = useQualificationConfig();
+    saveConfig,
+    loadSampleTemplate,
+    clearAllSections,
+    exportConfig,
+    importConfig,
+  } = useMasterQualificationConfig();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [editingQuestion, setEditingQuestion] = useState<{
     sectionId: string;
@@ -426,6 +426,129 @@ export const QuestionnaireSettings = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Helper functions to work with master config
+  const updateSection = (sectionId: string, updates: Partial<SectionType>) => {
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: config.sections.map((section) =>
+        section.id === sectionId ? { ...section, ...updates } : section
+      ),
+    };
+    saveConfig(newConfig);
+  };
+
+  const updateQuestion = (
+    sectionId: string,
+    questionId: string,
+    updates: Partial<QualificationQuestion>
+  ) => {
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: config.sections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              questions: section.questions.map((q) =>
+                q.id === questionId ? { ...q, ...updates } : q
+              ),
+            }
+          : section
+      ),
+    };
+    saveConfig(newConfig);
+  };
+
+  const addQuestion = (
+    sectionId: string,
+    question: Omit<QualificationQuestion, "order">
+  ) => {
+    const section = config.sections.find((s) => s.id === sectionId);
+    const maxOrder = section
+      ? Math.max(...section.questions.map((q) => q.order), 0)
+      : 0;
+
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: config.sections.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              questions: [...s.questions, { ...question, order: maxOrder + 1 }],
+            }
+          : s
+      ),
+    };
+    saveConfig(newConfig);
+  };
+
+  const removeQuestion = (sectionId: string, questionId: string) => {
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: config.sections.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              questions: s.questions.filter((q) => q.id !== questionId),
+            }
+          : s
+      ),
+    };
+    saveConfig(newConfig);
+  };
+
+  const reorderQuestions = (sectionId: string, questionIds: string[]) => {
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: config.sections.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              questions: s.questions.map((q) => ({
+                ...q,
+                order: questionIds.indexOf(q.id) + 1,
+              })),
+            }
+          : s
+      ),
+    };
+    saveConfig(newConfig);
+  };
+
+  const addSection = (section: Omit<SectionType, "questions">) => {
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: [
+        ...config.sections,
+        {
+          ...section,
+          questions: [],
+        },
+      ],
+    };
+    saveConfig(newConfig);
+  };
+
+  const removeSection = (sectionId: string) => {
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: config.sections.filter((s) => s.id !== sectionId),
+    };
+    saveConfig(newConfig);
+  };
+
+  const reorderSections = (sectionIds: string[]) => {
+    const sectionMap = new Map(config.sections.map((s) => [s.id, s]));
+    const newSections = sectionIds
+      .map((id) => sectionMap.get(id))
+      .filter((s): s is SectionType => s !== undefined);
+
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: newSections,
+    };
+    saveConfig(newConfig);
+  };
 
   const handleQuestionDragEnd = (event: DragEndEvent, sectionId: string) => {
     const { active, over } = event;
@@ -483,10 +606,13 @@ export const QuestionnaireSettings = () => {
       return;
     }
 
-    const sectionId = newSection.title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    
+    const sectionId = newSection.title
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "");
+
     // Check for duplicate IDs
-    if (config.sections.some(s => s.id === sectionId)) {
+    if (config.sections.some((s) => s.id === sectionId)) {
       toast.error("A section with this name already exists");
       return;
     }
@@ -502,11 +628,116 @@ export const QuestionnaireSettings = () => {
     setShowNewSection(false);
   };
 
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      importConfig(content);
+    };
+    reader.readAsText(file);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   if (isLoading) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </Card>
+    );
+  }
+
+  // Empty state when no sections exist
+  if (config.sections.length === 0) {
+    return (
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold">Questionnaire Configuration</h2>
+          </div>
+        </div>
+        <div className="text-center py-12">
+          <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+          <h3 className="text-lg font-semibold mb-2">No Questionnaire Configured</h3>
+          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            Create your qualification questionnaire here. These sections can then be enabled for inbound and outbound scripts.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button onClick={loadSampleTemplate} className="gap-2">
+              <FileText className="h-4 w-4" />
+              Load Sample Template
+            </Button>
+            <Button variant="outline" onClick={() => setShowNewSection(true)} className="gap-2">
+              <FolderPlus className="h-4 w-4" />
+              Create From Scratch
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              Import JSON
+            </Button>
+          </div>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileImport}
+            accept=".json"
+            className="hidden"
+          />
+          {showNewSection && (
+            <Card className="p-4 mt-6 border-2 border-dashed border-primary/50 max-w-md mx-auto text-left">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <FolderPlus className="h-4 w-4" />
+                Create New Section
+              </h3>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Section Title *</Label>
+                  <Input
+                    value={newSection.title}
+                    onChange={(e) => setNewSection({ ...newSection, title: e.target.value })}
+                    placeholder="e.g., Property Information"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Description (optional)</Label>
+                  <Input
+                    value={newSection.description}
+                    onChange={(e) => setNewSection({ ...newSection, description: e.target.value })}
+                    placeholder="e.g., Gather details about the property"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowNewSection(false);
+                      setNewSection({ title: "", description: "" });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleAddSection} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Create Section
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       </Card>
     );
@@ -523,6 +754,31 @@ export const QuestionnaireSettings = () => {
           <Button
             variant="outline"
             size="sm"
+            onClick={exportConfig}
+            className="gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            Import
+          </Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileImport}
+            accept=".json"
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
             className="gap-2"
             onClick={() => setShowNewSection(true)}
           >
@@ -533,19 +789,19 @@ export const QuestionnaireSettings = () => {
             <AlertDialogTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
                 <RotateCcw className="h-4 w-4" />
-                Reset
+                Clear All
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Reset to Default Questions?</AlertDialogTitle>
+                <AlertDialogTitle>Clear All Sections?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will replace all current sections and questions with the default questionnaire. This action cannot be undone.
+                  This will remove all sections and questions. This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={resetToDefaults}>Reset</AlertDialogAction>
+                <AlertDialogAction onClick={clearAllSections}>Clear All</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -553,7 +809,7 @@ export const QuestionnaireSettings = () => {
       </div>
 
       <p className="text-muted-foreground mb-6">
-        Drag sections and questions to reorder. Create custom sections and map questions to form fields.
+        Configure your qualification questionnaire here. Enable sections in Inbound/Outbound Scripts to use them.
       </p>
 
       {/* New Section Form */}
@@ -806,12 +1062,6 @@ export const QuestionnaireSettings = () => {
         </SortableContext>
       </DndContext>
 
-      {config.sections.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          <FolderPlus className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p>No sections yet. Create your first section to get started.</p>
-        </div>
-      )}
     </Card>
   );
 };
