@@ -8,9 +8,18 @@ export interface FieldOption {
   label: string;
 }
 
+// Alternative question variant
+export interface QuestionVariant {
+  id: string;
+  text: string;
+  isDefault?: boolean;
+}
+
 export interface QualificationQuestion {
   id: string;
-  question: string;
+  question: string; // Primary/default question text
+  alternatives?: QuestionVariant[]; // Alternative phrasings
+  selectionMode?: 'default' | 'random'; // How to choose between alternatives
   fieldName: string | null; // Maps to homebound_qualification_form_fields.field_name
   enabled: boolean;
   order: number;

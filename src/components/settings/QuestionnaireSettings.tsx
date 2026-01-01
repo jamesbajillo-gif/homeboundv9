@@ -59,8 +59,10 @@ import {
   FolderPlus,
   Pencil,
   ChevronDown,
+  Shuffle,
+  Copy,
 } from "lucide-react";
-import { QualificationQuestion, QualificationSection as SectionType, FieldType, FieldOption } from "@/config/qualificationConfig";
+import { QualificationQuestion, QualificationSection as SectionType, FieldType, FieldOption, QuestionVariant } from "@/config/qualificationConfig";
 
 const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: "text", label: "Text" },
@@ -104,6 +106,7 @@ const SortableQuestion = ({
   } = useSortable({ id: question.id });
 
   const [newOption, setNewOption] = useState("");
+  const [newAlternative, setNewAlternative] = useState("");
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -128,9 +131,49 @@ const SortableQuestion = ({
     });
   };
 
+  const handleAddAlternative = () => {
+    if (!newAlternative.trim()) return;
+    const alternatives = question.alternatives || [];
+    const newAlt: QuestionVariant = {
+      id: `alt_${Date.now()}`,
+      text: newAlternative.trim(),
+      isDefault: false,
+    };
+    onUpdate({ alternatives: [...alternatives, newAlt] });
+    setNewAlternative("");
+  };
+
+  const handleRemoveAlternative = (altId: string) => {
+    const alternatives = question.alternatives || [];
+    onUpdate({
+      alternatives: alternatives.filter(alt => alt.id !== altId)
+    });
+  };
+
+  const handleUpdateAlternative = (altId: string, text: string) => {
+    const alternatives = question.alternatives || [];
+    onUpdate({
+      alternatives: alternatives.map(alt => 
+        alt.id === altId ? { ...alt, text } : alt
+      )
+    });
+  };
+
+  const handleSetDefaultAlternative = (altId: string | null) => {
+    const alternatives = question.alternatives || [];
+    onUpdate({
+      alternatives: alternatives.map(alt => ({
+        ...alt,
+        isDefault: alt.id === altId
+      }))
+    });
+  };
+
   const getFieldTypeLabel = (type?: FieldType) => {
     return FIELD_TYPES.find(t => t.value === type)?.label || "Text";
   };
+
+  const hasAlternatives = question.alternatives && question.alternatives.length > 0;
 
   return (
     <div
@@ -140,14 +183,99 @@ const SortableQuestion = ({
     >
       {isEditing ? (
         <div className="p-4 space-y-4">
-          {/* Question Text */}
+          {/* Primary Question Text */}
           <div className="space-y-2">
-            <Label>Question Text</Label>
+            <Label>Primary Question</Label>
             <Textarea
               value={question.question}
               onChange={(e) => onUpdate({ question: e.target.value })}
               rows={2}
             />
+          </div>
+
+          {/* Alternative Questions */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2">
+                <Copy className="h-4 w-4" />
+                Alternative Questions
+              </Label>
+              {hasAlternatives && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground">Selection:</Label>
+                  <Select
+                    value={question.selectionMode || "default"}
+                    onValueChange={(value) => onUpdate({ selectionMode: value as 'default' | 'random' })}
+                  >
+                    <SelectTrigger className="w-[120px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Use Default</SelectItem>
+                      <SelectItem value="random">Random</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            
+            <p className="text-xs text-muted-foreground">
+              Add alternative phrasings for this question. They can be randomly selected or you can set a default.
+            </p>
+
+            {/* List of alternatives */}
+            <div className="space-y-2">
+              {(question.alternatives || []).map((alt, idx) => (
+                <div key={alt.id} className="flex items-start gap-2 p-2 bg-muted/30 rounded">
+                  <span className="text-xs text-muted-foreground mt-2.5 w-6">#{idx + 1}</span>
+                  <Textarea
+                    value={alt.text}
+                    onChange={(e) => handleUpdateAlternative(alt.id, e.target.value)}
+                    className="flex-1 min-h-[60px]"
+                    rows={2}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      variant={alt.isDefault ? "default" : "outline"}
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={() => handleSetDefaultAlternative(alt.isDefault ? null : alt.id)}
+                      title={alt.isDefault ? "Remove as default" : "Set as default"}
+                    >
+                      {alt.isDefault ? "Default" : "Set Default"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveAlternative(alt.id)}
+                      className="text-destructive h-7 w-7"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Add new alternative */}
+            <div className="flex items-start gap-2">
+              <Textarea
+                value={newAlternative}
+                onChange={(e) => setNewAlternative(e.target.value)}
+                placeholder="Add alternative question phrasing..."
+                className="flex-1"
+                rows={2}
+              />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleAddAlternative}
+                disabled={!newAlternative.trim()}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+            </div>
           </div>
 
           {/* Input Type & Required */}
@@ -298,6 +426,13 @@ const SortableQuestion = ({
                 {question.inputType === "select" && question.fieldOptions && (
                   <Badge variant="outline" className="text-xs">
                     {question.fieldOptions.length} options
+                  </Badge>
+                )}
+                {hasAlternatives && (
+                  <Badge variant="outline" className="text-xs flex items-center gap-1">
+                    <Shuffle className="h-3 w-3" />
+                    {question.alternatives!.length} alternative{question.alternatives!.length > 1 ? 's' : ''}
+                    {question.selectionMode === 'random' && ' (random)'}
                   </Badge>
                 )}
               </div>
