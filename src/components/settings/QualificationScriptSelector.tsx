@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { toast } from "sonner";
-import { Loader2, Plus, Save, ListChecks, Trash2 } from "lucide-react";
+import { Loader2, Plus, Save, ListChecks, Trash2, Pencil, X } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import {
@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Accordion,
@@ -39,6 +40,7 @@ interface QualificationScriptSelectorProps {
 interface SelectedQuestionAlt {
   id: string;
   text: string;
+  source?: "master" | "script"; // Track where the alternative came from
 }
 
 interface SelectedQuestion {
@@ -47,6 +49,7 @@ interface SelectedQuestion {
   questionId: string;
   questionText: string;
   alternatives?: SelectedQuestionAlt[];
+  localAlternatives?: SelectedQuestionAlt[]; // Script-specific alternatives
   zapierFieldName?: string;
   order: number;
 }
@@ -60,6 +63,9 @@ export const QualificationScriptSelector = ({
   const queryClient = useQueryClient();
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<SelectedQuestion | null>(null);
+  const [newAltText, setNewAltText] = useState("");
   const [pendingSelections, setPendingSelections] = useState<Set<string>>(new Set());
   const storageKey = `${STORAGE_KEY_PREFIX}_${stepName}`;
 
@@ -221,6 +227,50 @@ export const QualificationScriptSelector = ({
       .map((q, idx) => ({ ...q, order: idx }));
     setSelectedQuestions(updated);
     saveMutation.mutate(updated);
+  };
+
+  const handleEditQuestion = (question: SelectedQuestion) => {
+    setEditingQuestion({ ...question });
+    setNewAltText("");
+    setEditDialogOpen(true);
+  };
+
+  const handleAddLocalAlternative = () => {
+    if (!newAltText.trim() || !editingQuestion) return;
+    
+    const newAlt: SelectedQuestionAlt = {
+      id: `local_${Date.now()}`,
+      text: newAltText.trim(),
+      source: "script",
+    };
+    
+    setEditingQuestion({
+      ...editingQuestion,
+      localAlternatives: [...(editingQuestion.localAlternatives || []), newAlt],
+    });
+    setNewAltText("");
+  };
+
+  const handleRemoveLocalAlternative = (altId: string) => {
+    if (!editingQuestion) return;
+    setEditingQuestion({
+      ...editingQuestion,
+      localAlternatives: (editingQuestion.localAlternatives || []).filter(
+        (alt) => alt.id !== altId
+      ),
+    });
+  };
+
+  const handleSaveQuestionEdits = () => {
+    if (!editingQuestion) return;
+    
+    const updated = selectedQuestions.map((q) =>
+      q.questionId === editingQuestion.questionId ? editingQuestion : q
+    );
+    setSelectedQuestions(updated);
+    saveMutation.mutate(updated);
+    setEditDialogOpen(false);
+    setEditingQuestion(null);
   };
 
   const handleClearAll = () => {
@@ -385,41 +435,64 @@ export const QualificationScriptSelector = ({
               <div key={sectionId} className="space-y-2">
                 <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
                 <div className="space-y-1">
-                  {questions.map((q, idx) => (
-                    <div
-                      key={q.questionId}
-                      className="p-2 bg-muted/30 rounded text-sm group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-5">
-                          {idx + 1}.
-                        </span>
-                        <span className="flex-1">{q.questionText}</span>
-                        {q.zapierFieldName && (
-                          <Badge variant="outline" className="text-[10px] h-4 font-mono">
-                            {q.zapierFieldName}
-                          </Badge>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
-                          onClick={() => handleRemoveQuestion(q.questionId)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      {q.alternatives && q.alternatives.length > 0 && (
-                        <div className="ml-7 mt-1 pl-2 border-l-2 border-muted space-y-0.5">
-                          {q.alternatives.map((alt, altIdx) => (
-                            <p key={alt.id} className="text-xs text-muted-foreground">
-                              Alt {altIdx + 1}: {alt.text}
-                            </p>
-                          ))}
+                  {questions.map((q, idx) => {
+                    const allAlts = [
+                      ...(q.alternatives || []).map((a) => ({ ...a, source: "master" as const })),
+                      ...(q.localAlternatives || []),
+                    ];
+                    return (
+                      <div
+                        key={q.questionId}
+                        className="p-2 bg-muted/30 rounded text-sm group"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-5">
+                            {idx + 1}.
+                          </span>
+                          <span className="flex-1">{q.questionText}</span>
+                          {q.zapierFieldName && (
+                            <Badge variant="outline" className="text-[10px] h-4 font-mono">
+                              {q.zapierFieldName}
+                            </Badge>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                            onClick={() => handleEditQuestion(q)}
+                            title="Edit alternatives"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                            onClick={() => handleRemoveQuestion(q.questionId)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {allAlts.length > 0 && (
+                          <div className="ml-7 mt-1 pl-2 border-l-2 border-muted space-y-0.5">
+                            {allAlts.map((alt, altIdx) => (
+                              <div key={alt.id} className="flex items-center gap-1">
+                                <p className="text-xs text-muted-foreground flex-1">
+                                  Alt {altIdx + 1}: {alt.text}
+                                </p>
+                                <Badge 
+                                  variant={alt.source === "script" ? "default" : "secondary"} 
+                                  className="text-[9px] h-3.5 px-1"
+                                >
+                                  {alt.source === "script" ? stepName.replace("_qualification", "") : "forms"}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -428,6 +501,87 @@ export const QualificationScriptSelector = ({
             </p>
           </div>
         )}
+
+        {/* Edit Question Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit Question Alternatives</DialogTitle>
+            </DialogHeader>
+            {editingQuestion && (
+              <div className="space-y-4">
+                <div className="p-3 bg-muted/50 rounded">
+                  <p className="text-sm font-medium">{editingQuestion.questionText}</p>
+                </div>
+
+                {/* Master alternatives (read-only) */}
+                {editingQuestion.alternatives && editingQuestion.alternatives.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">From Forms Settings:</p>
+                    <div className="space-y-1 pl-2 border-l-2 border-muted">
+                      {editingQuestion.alternatives.map((alt, idx) => (
+                        <p key={alt.id} className="text-xs text-muted-foreground">
+                          {idx + 1}. {alt.text}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Script-specific alternatives (editable) */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium">Script-Specific Alternatives:</p>
+                  <div className="space-y-1">
+                    {(editingQuestion.localAlternatives || []).map((alt, idx) => (
+                      <div key={alt.id} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
+                        <span className="flex-1 text-sm">{alt.text}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive"
+                          onClick={() => handleRemoveLocalAlternative(alt.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newAltText}
+                      onChange={(e) => setNewAltText(e.target.value)}
+                      placeholder="Add alternative question..."
+                      className="flex-1 h-8 text-sm"
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddLocalAlternative())}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddLocalAlternative}
+                      disabled={!newAltText.trim()}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    These alternatives are only for this script and won't affect Forms settings.
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveQuestionEdits}>
+                <Save className="h-4 w-4 mr-1" />
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Card>
   );
