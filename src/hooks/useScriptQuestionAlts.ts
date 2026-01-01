@@ -115,6 +115,49 @@ export const useScriptQuestionAlts = () => {
     [deleteMutation]
   );
 
+  // Delete by ID
+  const deleteAlternativeById = useCallback(
+    async (id: number) => {
+      await mysqlApi.deleteById(TABLE_NAME, id);
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "question_alts", scriptName] });
+    },
+    [queryClient, scriptName]
+  );
+
+  // Set default alternative for a question (clears other defaults)
+  const setDefaultAlternative = useCallback(
+    async (questionId: string, altOrder: number) => {
+      // First, clear all defaults for this question
+      const questionAlts = getAlternativesForQuestion(questionId);
+      for (const alt of questionAlts) {
+        if (alt.is_default === 1 && alt.alt_order !== altOrder) {
+          await mysqlApi.updateById(TABLE_NAME, alt.id!, { is_default: 0 });
+        }
+      }
+      // Set the new default
+      const targetAlt = questionAlts.find(a => a.alt_order === altOrder);
+      if (targetAlt?.id) {
+        await mysqlApi.updateById(TABLE_NAME, targetAlt.id, { is_default: 1 });
+      }
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "question_alts", scriptName] });
+    },
+    [getAlternativesForQuestion, queryClient, scriptName]
+  );
+
+  // Clear default for a question
+  const clearDefault = useCallback(
+    async (questionId: string) => {
+      const questionAlts = getAlternativesForQuestion(questionId);
+      for (const alt of questionAlts) {
+        if (alt.is_default === 1) {
+          await mysqlApi.updateById(TABLE_NAME, alt.id!, { is_default: 0 });
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "question_alts", scriptName] });
+    },
+    [getAlternativesForQuestion, queryClient, scriptName]
+  );
+
   return {
     alternatives,
     isLoading,
@@ -123,7 +166,11 @@ export const useScriptQuestionAlts = () => {
     saveAlternative,
     addAlternative,
     deleteAlternative,
+    deleteAlternativeById,
+    setDefaultAlternative,
+    clearDefault,
     isSaving: saveMutation.isPending,
+    isDeleting: deleteMutation.isPending,
     refetch,
   };
 };
