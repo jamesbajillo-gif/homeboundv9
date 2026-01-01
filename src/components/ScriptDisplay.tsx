@@ -76,6 +76,26 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     return () => container.removeEventListener('scroll', handleScroll);
   }, [activeSection]);
 
+  // Keyboard navigation (up/down arrows)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const currentIndex = SECTION_ORDER.findIndex(s => s.id === activeSection);
+      
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        const nextIndex = Math.min(currentIndex + 1, SECTION_ORDER.length - 1);
+        handleNavigate(SECTION_ORDER[nextIndex].id);
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        handleNavigate(SECTION_ORDER[prevIndex].id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeSection, handleNavigate]);
+
   // Fetch scripts using React Query - auto-refreshes when cache is invalidated
   const { data: fetchedScriptData, isLoading: loading } = useQuery({
     queryKey: ['scripts', 'display', groupType, viciListId],
