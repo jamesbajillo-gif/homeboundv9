@@ -48,7 +48,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { useQualificationConfig } from "@/hooks/useQualificationConfig";
-import { useQualificationFields } from "@/hooks/useQualificationFields";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -59,15 +58,25 @@ import {
   RotateCcw,
   FolderPlus,
   Pencil,
+  ChevronDown,
 } from "lucide-react";
-import { QualificationQuestion, QualificationSection as SectionType } from "@/config/qualificationConfig";
+import { QualificationQuestion, QualificationSection as SectionType, FieldType, FieldOption } from "@/config/qualificationConfig";
+
+const FIELD_TYPES: { value: FieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "select", label: "Dropdown / Radio" },
+  { value: "currency", label: "Currency ($)" },
+  { value: "percentage", label: "Percentage (%)" },
+  { value: "number", label: "Number" },
+  { value: "email", label: "Email" },
+  { value: "date", label: "Date" },
+];
 
 // Sortable Question Item Component
 interface SortableQuestionProps {
   question: QualificationQuestion;
   index: number;
   sectionId: string;
-  availableFields: { value: string; label: string }[];
   isEditing: boolean;
   onEdit: () => void;
   onCancelEdit: () => void;
@@ -79,7 +88,6 @@ const SortableQuestion = ({
   question,
   index,
   sectionId,
-  availableFields,
   isEditing,
   onEdit,
   onCancelEdit,
@@ -95,20 +103,44 @@ const SortableQuestion = ({
     isDragging,
   } = useSortable({ id: question.id });
 
+  const [newOption, setNewOption] = useState("");
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const handleAddOption = () => {
+    if (!newOption.trim()) return;
+    const currentOptions = question.fieldOptions || [];
+    const optionValue = newOption.toLowerCase().replace(/\s+/g, '_');
+    onUpdate({
+      fieldOptions: [...currentOptions, { value: optionValue, label: newOption.trim() }]
+    });
+    setNewOption("");
+  };
+
+  const handleRemoveOption = (index: number) => {
+    const currentOptions = question.fieldOptions || [];
+    onUpdate({
+      fieldOptions: currentOptions.filter((_, i) => i !== index)
+    });
+  };
+
+  const getFieldTypeLabel = (type?: FieldType) => {
+    return FIELD_TYPES.find(t => t.value === type)?.label || "Text";
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-4 border rounded-lg ${!question.enabled ? 'opacity-60 bg-muted/50' : 'bg-card'} ${isDragging ? 'shadow-lg ring-2 ring-primary' : ''}`}
+      className={`border rounded-lg ${!question.enabled ? 'opacity-60 bg-muted/50' : 'bg-card'} ${isDragging ? 'shadow-lg ring-2 ring-primary' : ''}`}
     >
       {isEditing ? (
-        <div className="space-y-4">
+        <div className="p-4 space-y-4">
+          {/* Question Text */}
           <div className="space-y-2">
             <Label>Question Text</Label>
             <Textarea
@@ -117,30 +149,118 @@ const SortableQuestion = ({
               rows={2}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Map to Field</Label>
-            <Select
-              value={question.fieldName || "none"}
-              onValueChange={(value) =>
-                onUpdate({ fieldName: value === "none" ? null : value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a field to map" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No field mapping</SelectItem>
-                {availableFields.map((field) => (
-                  <SelectItem key={field.value} value={field.value}>
-                    {field.label}
-                  </SelectItem>
+
+          {/* Input Type & Required */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Input Type</Label>
+              <Select
+                value={question.inputType || "text"}
+                onValueChange={(value) => onUpdate({ inputType: value as FieldType })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FIELD_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Required</Label>
+              <div className="flex items-center h-10">
+                <Switch
+                  checked={question.isRequired || false}
+                  onCheckedChange={(isRequired) => onUpdate({ isRequired })}
+                />
+                <span className="ml-2 text-sm text-muted-foreground">
+                  {question.isRequired ? "Required" : "Optional"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Options for Select type */}
+          {question.inputType === "select" && (
+            <div className="space-y-2">
+              <Label>Options</Label>
+              <div className="space-y-2">
+                {(question.fieldOptions || []).map((option, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={option.label}
+                      onChange={(e) => {
+                        const options = [...(question.fieldOptions || [])];
+                        options[idx] = { ...option, label: e.target.value };
+                        onUpdate({ fieldOptions: options });
+                      }}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveOption(idx)}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 ))}
-              </SelectContent>
-            </Select>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={newOption}
+                    onChange={(e) => setNewOption(e.target.value)}
+                    placeholder="Add new option..."
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddOption())}
+                  />
+                  <Button variant="outline" size="sm" onClick={handleAddOption}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                2-4 options display as radio buttons, 5+ as a dropdown
+              </p>
+            </div>
+          )}
+
+          {/* Placeholder & Help Text */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Placeholder</Label>
+              <Input
+                value={question.placeholder || ""}
+                onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
+                placeholder="e.g., Enter value..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Help Text</Label>
+              <Input
+                value={question.helpText || ""}
+                onChange={(e) => onUpdate({ helpText: e.target.value || undefined })}
+                placeholder="Additional guidance..."
+              />
+            </div>
+          </div>
+
+          {/* Zapier Field Name */}
+          <div className="space-y-2">
+            <Label>Zapier Field Name</Label>
+            <Input
+              value={question.zapierFieldName || ""}
+              onChange={(e) => onUpdate({ zapierFieldName: e.target.value || undefined })}
+              placeholder="e.g., property_value"
+            />
             <p className="text-xs text-muted-foreground">
-              Mapped fields will show an input for the agent to fill in
+              This field name will be used in the Zapier webhook payload
             </p>
           </div>
+
           <div className="flex justify-end">
             <Button size="sm" onClick={onCancelEdit}>
               Done
@@ -148,51 +268,69 @@ const SortableQuestion = ({
           </div>
         </div>
       ) : (
-        <div className="flex items-start gap-3">
-          <button
-            className="mt-1 cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-muted rounded"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">
-              {index + 1}. {question.question}
-            </p>
-            {question.fieldName && (
-              <p className="text-xs text-muted-foreground mt-1">
-                → Maps to: <code className="bg-muted px-1 rounded">{question.fieldName}</code>
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <button
+              className="mt-1 cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-muted rounded"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">
+                {index + 1}. {question.question}
               </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={question.enabled}
-              onCheckedChange={(enabled) => onUpdate({ enabled })}
-            />
-            <Button variant="ghost" size="sm" onClick={onEdit}>
-              Edit
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Question?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently remove this question from the questionnaire.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={onRemove}>Delete</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Badge variant="outline" className="text-xs">
+                  {getFieldTypeLabel(question.inputType)}
+                </Badge>
+                {question.isRequired && (
+                  <Badge variant="secondary" className="text-xs">
+                    Required
+                  </Badge>
+                )}
+                {question.zapierFieldName && (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                    Zapier: {question.zapierFieldName}
+                  </Badge>
+                )}
+                {question.inputType === "select" && question.fieldOptions && (
+                  <Badge variant="outline" className="text-xs">
+                    {question.fieldOptions.length} options
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={question.enabled}
+                onCheckedChange={(enabled) => onUpdate({ enabled })}
+              />
+              <Button variant="ghost" size="sm" onClick={onEdit}>
+                <Pencil className="h-3 w-3 mr-1" />
+                Edit
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Question?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently remove this question from the questionnaire.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={onRemove}>Delete</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
         </div>
       )}
@@ -264,7 +402,6 @@ export const QuestionnaireSettings = () => {
     reorderSections,
     resetToDefaults,
   } = useQualificationConfig();
-  const { fields } = useQualificationFields();
 
   const [editingQuestion, setEditingQuestion] = useState<{
     sectionId: string;
@@ -274,7 +411,7 @@ export const QuestionnaireSettings = () => {
   const [newQuestion, setNewQuestion] = useState<{
     sectionId: string;
     text: string;
-    fieldName: string | null;
+    inputType: FieldType;
   } | null>(null);
   const [showNewSection, setShowNewSection] = useState(false);
   const [newSection, setNewSection] = useState({ title: "", description: "" });
@@ -289,11 +426,6 @@ export const QuestionnaireSettings = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  const availableFields = fields.map((f) => ({
-    value: f.field_name,
-    label: f.field_label,
-  }));
 
   const handleQuestionDragEnd = (event: DragEndEvent, sectionId: string) => {
     const { active, over } = event;
@@ -325,7 +457,7 @@ export const QuestionnaireSettings = () => {
   };
 
   const handleAddQuestion = (sectionId: string) => {
-    setNewQuestion({ sectionId, text: "", fieldName: null });
+    setNewQuestion({ sectionId, text: "", inputType: "text" });
   };
 
   const handleSaveNewQuestion = () => {
@@ -337,8 +469,9 @@ export const QuestionnaireSettings = () => {
     addQuestion(newQuestion.sectionId, {
       id: `${newQuestion.sectionId}_q${Date.now()}`,
       question: newQuestion.text.trim(),
-      fieldName: newQuestion.fieldName,
+      fieldName: null,
       enabled: true,
+      inputType: newQuestion.inputType,
     });
 
     setNewQuestion(null);
@@ -579,7 +712,6 @@ export const QuestionnaireSettings = () => {
                                 question={question}
                                 index={index}
                                 sectionId={section.id}
-                                availableFields={availableFields}
                                 isEditing={editingQuestion?.questionId === question.id}
                                 onEdit={() =>
                                   setEditingQuestion({
@@ -613,24 +745,23 @@ export const QuestionnaireSettings = () => {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>Map to Field (optional)</Label>
+                            <Label>Input Type</Label>
                             <Select
-                              value={newQuestion.fieldName || "none"}
+                              value={newQuestion.inputType}
                               onValueChange={(value) =>
                                 setNewQuestion({
                                   ...newQuestion,
-                                  fieldName: value === "none" ? null : value,
+                                  inputType: value as FieldType,
                                 })
                               }
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="Select a field to map" />
+                                <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="none">No field mapping</SelectItem>
-                                {availableFields.map((field) => (
-                                  <SelectItem key={field.value} value={field.value}>
-                                    {field.label}
+                                {FIELD_TYPES.map((type) => (
+                                  <SelectItem key={type.value} value={type.value}>
+                                    {type.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

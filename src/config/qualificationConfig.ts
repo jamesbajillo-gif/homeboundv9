@@ -1,12 +1,26 @@
 // Qualification Form Configuration
 // This file contains the default questions and field mappings for the qualification form
 
+export type FieldType = 'text' | 'select' | 'currency' | 'percentage' | 'email' | 'date' | 'number';
+
+export interface FieldOption {
+  value: string;
+  label: string;
+}
+
 export interface QualificationQuestion {
   id: string;
   question: string;
   fieldName: string | null; // Maps to homebound_qualification_form_fields.field_name
   enabled: boolean;
   order: number;
+  // Inline field configuration
+  inputType?: FieldType;
+  fieldOptions?: FieldOption[];
+  placeholder?: string;
+  helpText?: string;
+  isRequired?: boolean;
+  zapierFieldName?: string;
 }
 
 export interface QualificationSection {
@@ -35,10 +49,19 @@ export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
       questions: [
         {
           id: "property_type",
-          question: "What type of property is this? (single family, condo, townhouse, multi-family, etc.)",
+          question: "What type of property is this?",
           fieldName: "property_type",
           enabled: true,
           order: 1,
+          inputType: "select",
+          fieldOptions: [
+            { value: "single_family", label: "Single Family" },
+            { value: "condo", label: "Condo" },
+            { value: "townhouse", label: "Townhouse" },
+            { value: "multi_family", label: "Multi-family" },
+          ],
+          isRequired: true,
+          zapierFieldName: "property_type",
         },
         {
           id: "property_occupancy",
@@ -46,6 +69,14 @@ export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
           fieldName: "property_occupancy",
           enabled: true,
           order: 2,
+          inputType: "select",
+          fieldOptions: [
+            { value: "primary", label: "Primary Residence" },
+            { value: "second_home", label: "Second Home" },
+            { value: "investment", label: "Investment Property" },
+          ],
+          isRequired: true,
+          zapierFieldName: "property_occupancy",
         },
         {
           id: "refinance_type",
@@ -53,13 +84,25 @@ export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
           fieldName: "refinance_type",
           enabled: true,
           order: 3,
+          inputType: "select",
+          fieldOptions: [
+            { value: "rate_term", label: "Rate and Term" },
+            { value: "cash_out", label: "Cash Out" },
+          ],
+          isRequired: true,
+          zapierFieldName: "refinance_type",
         },
         {
           id: "property_value",
-          question: "What is your estimated property value? What have you seen online or from recent sales in your neighborhood?",
+          question: "What is your estimated property value?",
           fieldName: "property_value",
           enabled: true,
           order: 4,
+          inputType: "currency",
+          placeholder: "e.g., 450000",
+          helpText: "Based on recent sales or online estimates",
+          isRequired: true,
+          zapierFieldName: "property_value",
         },
       ],
     },
@@ -71,17 +114,24 @@ export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
       questions: [
         {
           id: "mortgage_balance",
-          question: "What is your current first mortgage balance and monthly payment?",
+          question: "What is your current first mortgage balance?",
           fieldName: "current_mortgage_balance",
           enabled: true,
           order: 1,
+          inputType: "currency",
+          placeholder: "e.g., 280000",
+          isRequired: true,
+          zapierFieldName: "mortgage_balance",
         },
         {
           id: "second_mortgage",
-          question: "Do you have a second mortgage? If so, what is the balance and payment? (Please note if applicable for Loan Officers)",
-          fieldName: null, // No direct field mapping - informational question
+          question: "Do you have a second mortgage? If so, what is the balance?",
+          fieldName: null,
           enabled: true,
           order: 2,
+          inputType: "text",
+          placeholder: "e.g., No / Yes - $50,000",
+          helpText: "Please note if applicable for Loan Officers",
         },
         {
           id: "interest_rate",
@@ -89,6 +139,10 @@ export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
           fieldName: "current_interest_rate",
           enabled: true,
           order: 3,
+          inputType: "percentage",
+          placeholder: "e.g., 6.5",
+          isRequired: true,
+          zapierFieldName: "interest_rate",
         },
       ],
     },
@@ -104,6 +158,10 @@ export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
           fieldName: "annual_income",
           enabled: true,
           order: 1,
+          inputType: "currency",
+          placeholder: "e.g., 85000",
+          isRequired: true,
+          zapierFieldName: "annual_income",
         },
         {
           id: "credit_score",
@@ -111,13 +169,27 @@ export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
           fieldName: "credit_score_range",
           enabled: true,
           order: 2,
+          inputType: "select",
+          fieldOptions: [
+            { value: "excellent", label: "Excellent (740+)" },
+            { value: "good", label: "Good (700-739)" },
+            { value: "fair", label: "Fair (660-699)" },
+            { value: "poor", label: "Poor (below 660)" },
+          ],
+          isRequired: true,
+          zapierFieldName: "credit_score_range",
         },
         {
           id: "monthly_debts",
-          question: "What are your total monthly debt obligations? (credit cards, car loans, personal loans, medical debts, etc.)",
+          question: "What are your total monthly debt obligations?",
           fieldName: "monthly_debt_payments",
           enabled: true,
           order: 3,
+          inputType: "currency",
+          placeholder: "e.g., 1200",
+          helpText: "Credit cards, car loans, personal loans, medical debts, etc.",
+          isRequired: true,
+          zapierFieldName: "monthly_debts",
         },
       ],
     },

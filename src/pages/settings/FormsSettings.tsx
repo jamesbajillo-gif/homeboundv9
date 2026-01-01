@@ -3,7 +3,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { QualificationFormSettings } from "@/components/settings/QualificationFormSettings";
 import { QuestionnaireSettings } from "@/components/settings/QuestionnaireSettings";
 import { QualificationForm } from "@/components/QualificationForm";
 
@@ -21,7 +20,7 @@ const FormsSettings = () => {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-3xl font-bold text-foreground">Qualification Forms</h1>
+          <h1 className="text-3xl font-bold text-foreground">Form Configuration</h1>
         </div>
       </div>
 
@@ -29,18 +28,13 @@ const FormsSettings = () => {
         <div className="p-4 sm:p-6 lg:p-8">
           <div className="max-w-6xl mx-auto">
             <Tabs defaultValue="questionnaire" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
-                <TabsTrigger value="fields">Form Fields</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="questionnaire">Questions & Fields</TabsTrigger>
                 <TabsTrigger value="preview">Preview</TabsTrigger>
               </TabsList>
 
               <TabsContent value="questionnaire" className="mt-6">
                 <QuestionnaireSettings />
-              </TabsContent>
-
-              <TabsContent value="fields" className="mt-6">
-                <QualificationFormSettings />
               </TabsContent>
 
               <TabsContent value="preview" className="mt-6">
