@@ -19,13 +19,23 @@ interface QualificationSectionProps {
 // Storage key for question alternatives
 const ALTERNATIVES_STORAGE_KEY = "qualification_question_alternatives";
 
+// Get all question texts for a question (primary + alternatives) with source info
+const getAllQuestionTextsWithSource = (question: QualificationQuestion): { text: string; source: 'primary' | 'master' | 'script' }[] => {
+  const items: { text: string; source: 'primary' | 'master' | 'script' }[] = [
+    { text: question.question, source: 'primary' }
+  ];
+  if (question.alternatives && question.alternatives.length > 0) {
+    items.push(...question.alternatives.map(alt => ({
+      text: alt.text,
+      source: (alt.source || 'master') as 'master' | 'script'
+    })));
+  }
+  return items;
+};
+
 // Get all question texts for a question (primary + alternatives)
 const getAllQuestionTexts = (question: QualificationQuestion): string[] => {
-  const texts = [question.question]; // Primary is always first
-  if (question.alternatives && question.alternatives.length > 0) {
-    texts.push(...question.alternatives.map(alt => alt.text));
-  }
-  return texts;
+  return getAllQuestionTextsWithSource(question).map(item => item.text);
 };
 
 // Get stored alternative selections from localStorage
@@ -121,8 +131,16 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
       <div className="space-y-6 pt-2">
         {enabledQuestions.map((question, questionIndex) => {
           const hasAlternatives = question.alternatives && question.alternatives.length > 0;
-          const allTexts = getAllQuestionTexts(question);
+          const allTextsWithSource = getAllQuestionTextsWithSource(question);
+          const allTexts = allTextsWithSource.map(item => item.text);
           const currentIndex = selectedAlternatives[question.id] ?? 0;
+          const currentSource = allTextsWithSource[currentIndex]?.source || 'primary';
+
+          const getSourceLabel = (source: 'primary' | 'master' | 'script') => {
+            if (source === 'primary') return 'Primary';
+            if (source === 'master') return 'Forms';
+            return 'Script';
+          };
 
           return (
             <div key={question.id} className="space-y-3">
@@ -153,12 +171,30 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                           <RefreshCw className="h-4 w-4 text-muted-foreground" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p className="text-xs">
-                          Alternative {currentIndex + 1} of {allTexts.length}
-                          <br />
-                          <span className="text-muted-foreground">Click to cycle</span>
-                        </p>
+                      <TooltipContent side="left" className="max-w-xs">
+                        <div className="text-xs space-y-1.5">
+                          <p className="font-medium">
+                            Showing {currentIndex + 1} of {allTexts.length} • {getSourceLabel(currentSource)}
+                          </p>
+                          <div className="border-t pt-1.5 space-y-1">
+                            {allTextsWithSource.map((item, idx) => (
+                              <div 
+                                key={idx} 
+                                className={`flex items-start gap-1.5 ${idx === currentIndex ? 'text-primary font-medium' : 'text-muted-foreground'}`}
+                              >
+                                <span className="shrink-0">{idx + 1}.</span>
+                                <span className="flex-1 line-clamp-2">{item.text}</span>
+                                <span className={`shrink-0 text-[10px] px-1 rounded ${
+                                  item.source === 'primary' ? 'bg-primary/20' : 
+                                  item.source === 'script' ? 'bg-green-500/20' : 'bg-muted'
+                                }`}>
+                                  {getSourceLabel(item.source)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-muted-foreground pt-1">Click to cycle</p>
+                        </div>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
