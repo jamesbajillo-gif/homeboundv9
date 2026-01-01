@@ -2,25 +2,17 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FloatingCallHeader } from "@/components/FloatingCallHeader";
 import { ScriptDisplay } from "@/components/ScriptDisplay";
-import { FloatingActionButtons } from "@/components/FloatingActionButtons";
 import { VICILeadDisplay } from "@/components/VICILeadDisplay";
 import { PasswordDialog } from "@/components/PasswordDialog";
 import { ListIdBadge } from "@/components/ListIdBadge";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
-type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
-
 const Index = () => {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<ScriptStep>("greeting");
   const qualificationSubmitRef = useRef<(() => void) | null>(null);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   useKeyboardShortcuts(() => setPasswordDialogOpen(true));
-
-  const handleQualificationSubmit = () => {
-    qualificationSubmitRef.current?.();
-  };
 
   return (
     <div className="min-h-screen bg-background overflow-hidden h-screen">
@@ -31,14 +23,7 @@ const Index = () => {
         </div>
       </div>
       <ScriptDisplay 
-        currentStep={currentStep} 
-        onStepChange={setCurrentStep}
         onQualificationSubmitRef={(fn) => { qualificationSubmitRef.current = fn; }}
-      />
-      <FloatingActionButtons 
-        currentStep={currentStep} 
-        onStepChange={setCurrentStep}
-        onQualificationSubmit={handleQualificationSubmit}
       />
       <ListIdBadge />
       <PasswordDialog
