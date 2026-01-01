@@ -1,4 +1,21 @@
 import { useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,11 +57,148 @@ import {
   Trash2,
   GripVertical,
   RotateCcw,
-  Save,
-  ChevronUp,
-  ChevronDown,
 } from "lucide-react";
-import { QualificationQuestion, QualificationSection } from "@/config/qualificationConfig";
+import { QualificationQuestion } from "@/config/qualificationConfig";
+
+// Sortable Question Item Component
+interface SortableQuestionProps {
+  question: QualificationQuestion;
+  index: number;
+  sectionId: string;
+  availableFields: { value: string; label: string }[];
+  isEditing: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onUpdate: (updates: Partial<QualificationQuestion>) => void;
+  onRemove: () => void;
+}
+
+const SortableQuestion = ({
+  question,
+  index,
+  sectionId,
+  availableFields,
+  isEditing,
+  onEdit,
+  onCancelEdit,
+  onUpdate,
+  onRemove,
+}: SortableQuestionProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: question.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 border rounded-lg ${!question.enabled ? 'opacity-60 bg-muted/50' : 'bg-card'} ${isDragging ? 'shadow-lg ring-2 ring-primary' : ''}`}
+    >
+      {isEditing ? (
+        // Edit mode
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Question Text</Label>
+            <Textarea
+              value={question.question}
+              onChange={(e) => onUpdate({ question: e.target.value })}
+              rows={2}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Map to Field</Label>
+            <Select
+              value={question.fieldName || "none"}
+              onValueChange={(value) =>
+                onUpdate({ fieldName: value === "none" ? null : value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a field to map" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No field mapping</SelectItem>
+                {availableFields.map((field) => (
+                  <SelectItem key={field.value} value={field.value}>
+                    {field.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Mapped fields will show an input for the agent to fill in
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button size="sm" onClick={onCancelEdit}>
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
+        // View mode
+        <div className="flex items-start gap-3">
+          <button
+            className="mt-1 cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-muted rounded"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">
+              {index + 1}. {question.question}
+            </p>
+            {question.fieldName && (
+              <p className="text-xs text-muted-foreground mt-1">
+                → Maps to: <code className="bg-muted px-1 rounded">{question.fieldName}</code>
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={question.enabled}
+              onCheckedChange={(enabled) => onUpdate({ enabled })}
+            />
+            <Button variant="ghost" size="sm" onClick={onEdit}>
+              Edit
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Question?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently remove this question from the questionnaire.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={onRemove}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const QuestionnaireSettings = () => {
   const {
@@ -55,8 +209,8 @@ export const QuestionnaireSettings = () => {
     updateQuestion,
     addQuestion,
     removeQuestion,
+    reorderQuestions,
     resetToDefaults,
-    saveConfig,
   } = useQualificationConfig();
   const { fields } = useQualificationFields();
 
@@ -70,12 +224,38 @@ export const QuestionnaireSettings = () => {
     fieldName: string | null;
   } | null>(null);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   // Get available fields that can be mapped to questions
-  const availableFields = fields.map(f => ({
+  const availableFields = fields.map((f) => ({
     value: f.field_name,
     label: f.field_label,
-    section: f.field_section,
   }));
+
+  const handleDragEnd = (event: DragEndEvent, sectionId: string) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const section = config.sections.find((s) => s.id === sectionId);
+      if (!section) return;
+
+      const oldIndex = section.questions.findIndex((q) => q.id === active.id);
+      const newIndex = section.questions.findIndex((q) => q.id === over.id);
+
+      const reorderedQuestions = arrayMove(section.questions, oldIndex, newIndex);
+      const questionIds = reorderedQuestions.map((q) => q.id);
+      reorderQuestions(sectionId, questionIds);
+    }
+  };
 
   const handleAddQuestion = (sectionId: string) => {
     setNewQuestion({ sectionId, text: "", fieldName: null });
@@ -95,31 +275,6 @@ export const QuestionnaireSettings = () => {
     });
 
     setNewQuestion(null);
-  };
-
-  const handleMoveQuestion = (sectionId: string, questionId: string, direction: 'up' | 'down') => {
-    const section = config.sections.find(s => s.id === sectionId);
-    if (!section) return;
-
-    const questions = [...section.questions].sort((a, b) => a.order - b.order);
-    const currentIndex = questions.findIndex(q => q.id === questionId);
-
-    if (
-      (direction === 'up' && currentIndex === 0) ||
-      (direction === 'down' && currentIndex === questions.length - 1)
-    ) {
-      return;
-    }
-
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    const newOrder = questions.map((q, i) => {
-      if (i === currentIndex) return { ...q, order: questions[newIndex].order };
-      if (i === newIndex) return { ...q, order: questions[currentIndex].order };
-      return q;
-    });
-
-    const updatedSection = { ...section, questions: newOrder };
-    saveConfig({ ...config, sections: config.sections.map(s => s.id === sectionId ? updatedSection : s) });
   };
 
   if (isLoading) {
@@ -162,163 +317,76 @@ export const QuestionnaireSettings = () => {
       </div>
 
       <p className="text-muted-foreground mb-6">
-        Configure the qualification questions shown to agents. Each question can be mapped to a form field for data collection.
+        Drag and drop to reorder questions. Each question can be mapped to a form field for data collection.
       </p>
 
-      <Accordion type="multiple" defaultValue={config.sections.map(s => s.id)} className="space-y-4">
-        {config.sections.map((section) => (
-          <AccordionItem key={section.id} value={section.id} className="border rounded-lg px-4">
-            <AccordionTrigger className="hover:no-underline py-4">
-              <div className="flex items-center gap-3 flex-1">
-                <span className="font-semibold">{section.title}</span>
-                <Badge variant={section.enabled ? "default" : "secondary"}>
-                  {section.enabled ? `${section.questions.filter(q => q.enabled).length} questions` : "Disabled"}
-                </Badge>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pt-4 pb-6">
-              <div className="space-y-4">
-                {/* Section toggle */}
-                <div className="flex items-center justify-between pb-4 border-b">
-                  <div>
-                    <Label>Enable Section</Label>
-                    <p className="text-xs text-muted-foreground">Show this section in the qualification form</p>
-                  </div>
-                  <Switch
-                    checked={section.enabled}
-                    onCheckedChange={(enabled) => updateSection(section.id, { enabled })}
-                  />
-                </div>
+      <Accordion type="multiple" defaultValue={config.sections.map((s) => s.id)} className="space-y-4">
+        {config.sections.map((section) => {
+          const sortedQuestions = [...section.questions].sort((a, b) => a.order - b.order);
 
-                {/* Questions list */}
-                <div className="space-y-3">
-                  {section.questions
-                    .sort((a, b) => a.order - b.order)
-                    .map((question, index) => (
-                      <div
-                        key={question.id}
-                        className={`p-4 border rounded-lg ${!question.enabled ? 'opacity-60 bg-muted/50' : 'bg-card'}`}
-                      >
-                        {editingQuestion?.questionId === question.id ? (
-                          // Edit mode
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label>Question Text</Label>
-                              <Textarea
-                                value={question.question}
-                                onChange={(e) =>
-                                  updateQuestion(section.id, question.id, { question: e.target.value })
-                                }
-                                rows={2}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Map to Field</Label>
-                              <Select
-                                value={question.fieldName || "none"}
-                                onValueChange={(value) =>
-                                  updateQuestion(section.id, question.id, {
-                                    fieldName: value === "none" ? null : value,
-                                  })
-                                }
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select a field to map" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">No field mapping</SelectItem>
-                                  {availableFields.map((field) => (
-                                    <SelectItem key={field.value} value={field.value}>
-                                      {field.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <p className="text-xs text-muted-foreground">
-                                Mapped fields will show an input for the agent to fill in
-                              </p>
-                            </div>
-                            <div className="flex justify-end">
-                              <Button size="sm" onClick={() => setEditingQuestion(null)}>
-                                Done
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          // View mode
-                          <div className="flex items-start gap-3">
-                            <div className="flex flex-col gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => handleMoveQuestion(section.id, question.id, 'up')}
-                                disabled={index === 0}
-                              >
-                                <ChevronUp className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => handleMoveQuestion(section.id, question.id, 'down')}
-                                disabled={index === section.questions.length - 1}
-                              >
-                                <ChevronDown className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium">{index + 1}. {question.question}</p>
-                              {question.fieldName && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  → Maps to: <code className="bg-muted px-1 rounded">{question.fieldName}</code>
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                checked={question.enabled}
-                                onCheckedChange={(enabled) =>
-                                  updateQuestion(section.id, question.id, { enabled })
-                                }
-                              />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  setEditingQuestion({ sectionId: section.id, questionId: question.id })
-                                }
-                              >
-                                Edit
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Question?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will permanently remove this question from the questionnaire.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => removeQuestion(section.id, question.id)}
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </div>
-                        )}
+          return (
+            <AccordionItem key={section.id} value={section.id} className="border rounded-lg px-4">
+              <AccordionTrigger className="hover:no-underline py-4">
+                <div className="flex items-center gap-3 flex-1">
+                  <span className="font-semibold">{section.title}</span>
+                  <Badge variant={section.enabled ? "default" : "secondary"}>
+                    {section.enabled
+                      ? `${section.questions.filter((q) => q.enabled).length} questions`
+                      : "Disabled"}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-4 pb-6">
+                <div className="space-y-4">
+                  {/* Section toggle */}
+                  <div className="flex items-center justify-between pb-4 border-b">
+                    <div>
+                      <Label>Enable Section</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Show this section in the qualification form
+                      </p>
+                    </div>
+                    <Switch
+                      checked={section.enabled}
+                      onCheckedChange={(enabled) => updateSection(section.id, { enabled })}
+                    />
+                  </div>
+
+                  {/* Questions list with drag and drop */}
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => handleDragEnd(event, section.id)}
+                  >
+                    <SortableContext
+                      items={sortedQuestions.map((q) => q.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-3">
+                        {sortedQuestions.map((question, index) => (
+                          <SortableQuestion
+                            key={question.id}
+                            question={question}
+                            index={index}
+                            sectionId={section.id}
+                            availableFields={availableFields}
+                            isEditing={editingQuestion?.questionId === question.id}
+                            onEdit={() =>
+                              setEditingQuestion({
+                                sectionId: section.id,
+                                questionId: question.id,
+                              })
+                            }
+                            onCancelEdit={() => setEditingQuestion(null)}
+                            onUpdate={(updates) =>
+                              updateQuestion(section.id, question.id, updates)
+                            }
+                            onRemove={() => removeQuestion(section.id, question.id)}
+                          />
+                        ))}
                       </div>
-                    ))}
+                    </SortableContext>
+                  </DndContext>
 
                   {/* New question form */}
                   {newQuestion?.sectionId === section.id ? (
@@ -327,7 +395,9 @@ export const QuestionnaireSettings = () => {
                         <Label>New Question</Label>
                         <Textarea
                           value={newQuestion.text}
-                          onChange={(e) => setNewQuestion({ ...newQuestion, text: e.target.value })}
+                          onChange={(e) =>
+                            setNewQuestion({ ...newQuestion, text: e.target.value })
+                          }
                           placeholder="Enter your question..."
                           rows={2}
                         />
@@ -337,7 +407,10 @@ export const QuestionnaireSettings = () => {
                         <Select
                           value={newQuestion.fieldName || "none"}
                           onValueChange={(value) =>
-                            setNewQuestion({ ...newQuestion, fieldName: value === "none" ? null : value })
+                            setNewQuestion({
+                              ...newQuestion,
+                              fieldName: value === "none" ? null : value,
+                            })
                           }
                         >
                           <SelectTrigger>
@@ -354,11 +427,21 @@ export const QuestionnaireSettings = () => {
                         </Select>
                       </div>
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setNewQuestion(null)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setNewQuestion(null)}
+                        >
                           Cancel
                         </Button>
-                        <Button size="sm" onClick={handleSaveNewQuestion} disabled={isSaving}>
-                          {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        <Button
+                          size="sm"
+                          onClick={handleSaveNewQuestion}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
                           Add Question
                         </Button>
                       </div>
@@ -374,10 +457,10 @@ export const QuestionnaireSettings = () => {
                     </Button>
                   )}
                 </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        ))}
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
       </Accordion>
     </Card>
   );
