@@ -245,6 +245,20 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
   // Get enabled sections
   const enabledSections = getEnabledSections(config);
 
+  // Show empty state if no questions configured for this script
+  if (enabledSections.length === 0 || enabledSections.every(s => s.questions.length === 0)) {
+    return (
+      <Card className="p-6 sm:p-8 text-center">
+        <p className="text-muted-foreground">
+          No qualification questions configured for this script.
+        </p>
+        <p className="text-sm text-muted-foreground mt-2">
+          Configure questions in Settings → {groupType === "outbound" ? "Outbound" : "Inbound"} Scripts → Qualification tab.
+        </p>
+      </Card>
+    );
+  }
+
   return (
     <Form {...form}>
       <form className="space-y-6 sm:space-y-8 md:space-y-10">
