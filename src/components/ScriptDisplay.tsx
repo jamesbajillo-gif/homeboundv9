@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QualificationForm } from "@/components/QualificationForm";
 import { mysqlApi } from "@/lib/mysqlApi";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
@@ -35,14 +35,41 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [activeListName, setActiveListName] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<ScriptStep>(SECTION_ORDER[0].id);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { groupType } = useGroup();
   const { leadData } = useVICI();
   const viciListId = leadData?.list_id;
 
-  // Handle navigation to a section
+  // Handle navigation to a section (smooth scroll)
   const handleNavigate = useCallback((sectionId: string) => {
-    setActiveSection(sectionId as ScriptStep);
+    const index = SECTION_ORDER.findIndex(s => s.id === sectionId);
+    if (scrollContainerRef.current && index !== -1) {
+      const sectionWidth = scrollContainerRef.current.offsetWidth;
+      scrollContainerRef.current.scrollTo({
+        left: index * sectionWidth,
+        behavior: 'smooth'
+      });
+    }
   }, []);
+
+  // Track scroll position to update active section
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const sectionWidth = container.offsetWidth;
+      const scrollPosition = container.scrollLeft;
+      const index = Math.round(scrollPosition / sectionWidth);
+      const newSection = SECTION_ORDER[index]?.id;
+      if (newSection && newSection !== activeSection) {
+        setActiveSection(newSection);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [activeSection]);
 
   // Fetch scripts using React Query - auto-refreshes when cache is invalidated
   const { data: fetchedScriptData, isLoading: loading } = useQuery({
@@ -195,14 +222,6 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     );
   }
 
-  // Get current section data
-  const currentSectionIndex = SECTION_ORDER.findIndex(s => s.id === activeSection);
-  const currentSection = SECTION_ORDER[currentSectionIndex];
-  const sectionData = scriptData[activeSection];
-  const Icon = currentSection?.icon;
-  const processedContent = sectionData 
-    ? replaceScriptVariables(sectionData.content, leadData) 
-    : '';
 
   return (
     <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-20 h-full">
@@ -216,54 +235,75 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
           </div>
         )}
 
-        {/* Single section display */}
-        {sectionData && currentSection && (
-          <ScrollArea className="flex-1 h-[calc(100vh-180px)] md:h-[calc(100vh-200px)]">
-            <Card 
-              className="border-l-4 shadow-sm"
-              style={{ borderLeftColor: `hsl(var(--${activeSection === 'greeting' ? 'primary' : activeSection === 'qualification' ? 'primary' : activeSection === 'objectionHandling' ? 'warning' : activeSection === 'closingNotInterested' ? 'destructive' : 'success'}))` }}
-            >
-              <CardHeader className="pb-2 md:pb-3">
-                <div className="flex items-center gap-2 md:gap-3">
-                  <div className={`p-1.5 md:p-2 rounded-lg bg-muted ${currentSection.color}`}>
-                    <Icon className="h-4 w-4 md:h-5 md:w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] md:text-xs font-medium">
-                        {currentSectionIndex + 1} of {SECTION_ORDER.length}
-                      </Badge>
-                    </div>
-                    <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-foreground mt-1">
-                      {currentSection.title}
-                    </CardTitle>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {activeSection === "qualification" ? (
-                  <>
-                    <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
-                      <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-                        {processedContent}
-                      </pre>
-                    </div>
-                    <Separator className="my-4 md:my-6" />
-                    <QualificationForm 
-                      onSubmitRef={onQualificationSubmitRef}
-                    />
-                  </>
-                ) : (
-                  <div className="prose prose-sm md:prose-base max-w-none">
-                    <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-                      {processedContent}
-                    </pre>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </ScrollArea>
-        )}
+        {/* Horizontal scroll container with snap */}
+        <div 
+          ref={scrollContainerRef}
+          className="flex-1 flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-[calc(100vh-180px)] md:h-[calc(100vh-200px)]"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {SECTION_ORDER.map((section, index) => {
+            const sectionData = scriptData[section.id];
+            const Icon = section.icon;
+            const processedContent = sectionData 
+              ? replaceScriptVariables(sectionData.content, leadData) 
+              : '';
+
+            if (!sectionData) return null;
+
+            return (
+              <div 
+                key={section.id}
+                className="w-full flex-shrink-0 snap-center px-1"
+              >
+                <ScrollArea className="h-full">
+                  <Card 
+                    className="border-l-4 shadow-sm transition-all duration-300"
+                    style={{ borderLeftColor: `hsl(var(--${section.id === 'greeting' ? 'primary' : section.id === 'qualification' ? 'primary' : section.id === 'objectionHandling' ? 'warning' : section.id === 'closingNotInterested' ? 'destructive' : 'success'}))` }}
+                  >
+                    <CardHeader className="pb-2 md:pb-3">
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <div className={`p-1.5 md:p-2 rounded-lg bg-muted ${section.color}`}>
+                          <Icon className="h-4 w-4 md:h-5 md:w-5" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] md:text-xs font-medium">
+                              {index + 1} of {SECTION_ORDER.length}
+                            </Badge>
+                          </div>
+                          <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-foreground mt-1">
+                            {section.title}
+                          </CardTitle>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {section.id === "qualification" ? (
+                        <>
+                          <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
+                            <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
+                              {processedContent}
+                            </pre>
+                          </div>
+                          <Separator className="my-4 md:my-6" />
+                          <QualificationForm 
+                            onSubmitRef={onQualificationSubmitRef}
+                          />
+                        </>
+                      ) : (
+                        <div className="prose prose-sm md:prose-base max-w-none">
+                          <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
+                            {processedContent}
+                          </pre>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </ScrollArea>
+              </div>
+            );
+          })}
+        </div>
         
         {/* Fixed bottom navigation */}
         <ScriptNavigation
