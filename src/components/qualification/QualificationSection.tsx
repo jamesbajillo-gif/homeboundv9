@@ -4,7 +4,6 @@ import { RefreshCw, Pencil, Plus } from "lucide-react";
 import { QualificationSection as SectionType, getEnabledQuestions, QualificationQuestion } from "@/config/qualificationConfig";
 import { QuestionField } from "./QuestionField";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
@@ -282,13 +281,14 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                 </span>
                 
                 {isEditing ? (
-                  /* Inline editing mode */
-                  <div className="flex-1 space-y-2">
-                    <Input
+                  /* Inline editing - directly in place */
+                  <div className="flex-1 flex items-center gap-2">
+                    <input
+                      type="text"
                       value={editingText}
                       onChange={(e) => setEditingText(e.target.value)}
-                      placeholder={isAddingNew ? "Type new alternative..." : "Edit question text..."}
-                      className="text-base"
+                      placeholder={isAddingNew ? "Type new alternative..." : ""}
+                      className="flex-1 text-base font-medium text-foreground bg-transparent border-b-2 border-primary focus:outline-none py-0.5"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -298,30 +298,18 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                           handleCancelEdit();
                         }
                       }}
+                      onBlur={() => {
+                        // Small delay to allow button clicks
+                        setTimeout(() => {
+                          if (editingQuestionId === question.id) {
+                            handleCancelEdit();
+                          }
+                        }, 150);
+                      }}
                     />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => handleConfirmEdit(question.id)}
-                        disabled={!editingText.trim()}
-                      >
-                        {isAddingNew ? "Add" : "Save as Alternative"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleCancelEdit}
-                      >
-                        Cancel
-                      </Button>
-                      {!isAddingNew && (
-                        <span className="text-xs text-muted-foreground">
-                          Editing will create a new session alternative
-                        </span>
-                      )}
-                    </div>
+                    {question.isRequired && (
+                      <span className="text-destructive">*</span>
+                    )}
                   </div>
                 ) : (
                   /* Display mode */
