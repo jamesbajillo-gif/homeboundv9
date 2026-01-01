@@ -232,12 +232,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
         )}
 
         <ScrollArea className="h-[calc(100vh-140px)] md:h-[calc(100vh-160px)] [&>[data-radix-scroll-area-scrollbar]]:opacity-100">
-          <ScriptNavigation
-            sections={SECTION_ORDER}
-            activeSection={activeSection}
-            onNavigate={handleNavigate}
-          />
-          <div className="pr-3 space-y-6 md:space-y-8 pb-8 pt-2">
+          <div className="pr-3 space-y-6 md:space-y-8 pb-24 pt-2">
             {SECTION_ORDER.map((section, index) => {
               const sectionData = scriptData[section.id];
               const Icon = section.icon;
@@ -297,6 +292,13 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
             })}
           </div>
         </ScrollArea>
+        
+        {/* Fixed bottom navigation */}
+        <ScriptNavigation
+          sections={SECTION_ORDER}
+          activeSection={activeSection}
+          onNavigate={handleNavigate}
+        />
       </div>
     </div>
   );

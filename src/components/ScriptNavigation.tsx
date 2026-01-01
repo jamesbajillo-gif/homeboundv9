@@ -17,7 +17,7 @@ interface ScriptNavigationProps {
 
 export function ScriptNavigation({ sections, activeSection, onNavigate }: ScriptNavigationProps) {
   return (
-    <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b shadow-sm">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t shadow-lg pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-center gap-1 p-2 overflow-x-auto">
         {sections.map((section) => {
           const Icon = section.icon;
