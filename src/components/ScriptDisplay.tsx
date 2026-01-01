@@ -163,7 +163,7 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
   if (loading) {
     return (
       <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
-        <div className="max-w-full mx-auto flex items-center justify-center h-[calc(100vh-200px)]">
+        <div className="max-w-5xl mx-auto flex items-center justify-center h-[calc(100vh-200px)]">
           <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 animate-spin text-primary" />
         </div>
       </div>
@@ -173,7 +173,7 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
   if (!scriptData) {
     return (
       <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
-        <div className="max-w-full mx-auto">
+        <div className="max-w-5xl mx-auto">
           <p className="text-center text-muted-foreground text-sm md:text-base">Failed to load script data.</p>
         </div>
       </div>
@@ -186,7 +186,7 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
   if (!currentSection) {
     return (
       <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
-        <div className="max-w-full mx-auto">
+        <div className="max-w-5xl mx-auto">
           <Card className="p-4 sm:p-6 md:p-8">
             <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground mb-3">Step Not Found</h2>
             <p className="text-muted-foreground mb-3 text-sm md:text-base">
@@ -217,7 +217,7 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
   
   return (
     <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-2 md:pb-4">
-      <div className="max-w-full mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* List ID Script Indicator Badge */}
       {usingListIdScripts && activeListId && activeListName && (
         <div className="mb-3 md:mb-4 animate-fade-in">
