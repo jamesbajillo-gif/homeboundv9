@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { mysqlApi } from "@/lib/mysql-api";
+import { mysqlApi } from "@/lib/mysqlApi";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -42,7 +42,7 @@ export const UserGroupSettings = () => {
   const fetchUserGroups = async () => {
     try {
       setLoading(true);
-      const data = await mysqlApi.fetchAll<UserGroup>("user_groups");
+      const data = await mysqlApi.getAll<UserGroup>("user_groups");
       
       // Sort by id descending (newest first)
       const sortedData = data.sort((a, b) => b.id - a.id);
@@ -87,7 +87,7 @@ export const UserGroupSettings = () => {
 
   const handleRemoveUser = async (id: number, userIdentifier: string) => {
     try {
-      await mysqlApi.delete("user_groups", id);
+      await mysqlApi.deleteById("user_groups", id);
 
       toast.success(`User "${userIdentifier}" removed successfully!`);
       fetchUserGroups();
