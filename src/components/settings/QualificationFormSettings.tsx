@@ -465,7 +465,7 @@ export const QualificationFormSettings = () => {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => setEditingOptions({
-                                    fieldId: field.id,
+                                    fieldId: String(field.id),
                                     options: field.field_options.options
                                   })}
                                   className="h-7 text-xs"

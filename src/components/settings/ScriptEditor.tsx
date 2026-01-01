@@ -126,8 +126,9 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
             const cleanedScripts: Record<string, SectionScript> = {};
             let hasValidContent = false;
             
-            for (const [key, sectionData] of Object.entries(parsed)) {
-              if (sectionData && typeof sectionData === 'object' && 'content' in sectionData) {
+            for (const [key, rawSectionData] of Object.entries(parsed)) {
+              if (rawSectionData && typeof rawSectionData === 'object' && 'content' in rawSectionData) {
+                const sectionData = rawSectionData as { content?: unknown; enabled?: unknown; title?: unknown };
                 const sectionContent = String(sectionData.content || '').trim();
                 if (isValidContent(sectionContent)) {
                   const questions = parseQuestions(sectionContent);
@@ -534,7 +535,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
           </Tabs>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={fetchSection} disabled={saving}>
+            <Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.byStep(stepName) })} disabled={saving}>
               Reset
             </Button>
             <Button onClick={handleSaveSections} disabled={saving}>
@@ -629,7 +630,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={fetchSection}
+              onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.byStep(stepName) })}
               disabled={saving}
             >
               Reset

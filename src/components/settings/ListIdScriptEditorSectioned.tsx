@@ -102,10 +102,11 @@ export const ListIdScriptEditorSectioned = ({ listId }: ListIdScriptEditorSectio
           
           for (const [key, section] of Object.entries(parsed)) {
             if (section && typeof section === 'object' && 'content' in section) {
-              const sectionContent = String(section.content || '').trim();
+              const sectionData = section as { content?: unknown; title?: unknown };
+              const sectionContent = String(sectionData.content || '').trim();
               if (isValidContent(sectionContent)) {
                 cleanedScripts[key] = {
-                  title: String(section.title || DEFAULT_QUALIFICATION_SCRIPTS[key as keyof typeof DEFAULT_QUALIFICATION_SCRIPTS]?.title || ''),
+                  title: String(sectionData.title || DEFAULT_QUALIFICATION_SCRIPTS[key as keyof typeof DEFAULT_QUALIFICATION_SCRIPTS]?.title || ''),
                   content: sectionContent
                 };
                 hasValidContent = true;

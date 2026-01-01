@@ -151,16 +151,17 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
               
               for (const [key, section] of Object.entries(parsed)) {
                 if (section && typeof section === 'object' && 'content' in section) {
-                  const sectionContent = String(section.content || '').trim();
+                  const sectionData = section as { content?: unknown; enabled?: unknown; title?: unknown };
+                  const sectionContent = String(sectionData.content || '').trim();
                   if (isValidContent(sectionContent)) {
                     const questions = parseQuestions(sectionContent);
                     // Initialize enabled array - default all to true if not set
-                    const enabled = Array.isArray(section.enabled) 
-                      ? section.enabled 
+                    const enabled = Array.isArray(sectionData.enabled) 
+                      ? sectionData.enabled 
                       : questions.map(() => true);
                     
                     cleanedScripts[key] = {
-                      title: String(section.title || DEFAULT_SCRIPTS[key as keyof typeof DEFAULT_SCRIPTS]?.title || ''),
+                      title: String(sectionData.title || DEFAULT_SCRIPTS[key as keyof typeof DEFAULT_SCRIPTS]?.title || ''),
                       content: sectionContent,
                       enabled: enabled.slice(0, questions.length) // Ensure array length matches questions
                     };
