@@ -1,26 +1,34 @@
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QualificationForm } from "@/components/QualificationForm";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
 import { useGroup } from "@/contexts/GroupContext";
 import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { Separator } from "@/components/ui/separator";
 
 type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
 
 interface ScriptDisplayProps {
-  currentStep: ScriptStep;
-  onStepChange: (step: ScriptStep) => void;
   onQualificationSubmitRef?: (submitFn: () => void) => void;
 }
 
-export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmitRef }: ScriptDisplayProps) => {
+// Define the order and metadata for each section
+const SECTION_ORDER: { id: ScriptStep; title: string; icon: typeof Phone; color: string }[] = [
+  { id: "greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500" },
+  { id: "qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500" },
+  { id: "objectionHandling", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500" },
+  { id: "closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500" },
+  { id: "closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500" },
+];
+
+export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) => {
   const [scriptData, setScriptData] = useState<Record<ScriptStep, { title: string; content: string }> | null>(null);
   const [usingListIdScripts, setUsingListIdScripts] = useState(false);
   const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -180,80 +188,77 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
     );
   }
 
-  const currentSection = scriptData[currentStep];
-  
-  // If current section doesn't exist, show error and fallback
-  if (!currentSection) {
-    return (
-      <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
-        <div className="max-w-5xl mx-auto">
-          <Card className="p-4 sm:p-6 md:p-8">
-            <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground mb-3">Step Not Found</h2>
-            <p className="text-muted-foreground mb-3 text-sm md:text-base">
-              The script step "{currentStep}" is not available in the database.
-            </p>
-            <p className="text-xs md:text-sm text-muted-foreground">
-              Please run the database migration to add missing steps.
-            </p>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // Replace bracketed placeholders with VICI data
-  const processedContent = replaceScriptVariables(currentSection.content, leadData);
-
-  const currentIndex = Object.keys(scriptData).indexOf(currentStep);
-  
-  // Map step names to display titles
-  const stepTitles: Record<ScriptStep, string> = {
-    greeting: "Opening Spiel",
-    qualification: "Qualification",
-    objectionHandling: "Objection Handling",
-    closingNotInterested: "Closing - Not Interested",
-    closingSuccess: "Closing - Success"
-  };
-  
   return (
-    <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-2 md:pb-4">
+    <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
       <div className="max-w-5xl mx-auto">
         {/* List ID Script Indicator Badge */}
-      {usingListIdScripts && activeListId && activeListName && (
-        <div className="mb-3 md:mb-4 animate-fade-in">
-          <Badge variant="secondary" className="text-xs sm:text-sm font-medium">
-            <span className="font-bold">{activeListId} - {activeListName}</span>
-          </Badge>
-        </div>
-      )}
-        
-        <div className="mb-2 md:mb-3">
-          <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-foreground">{stepTitles[currentStep]}</h1>
-        </div>
+        {usingListIdScripts && activeListId && activeListName && (
+          <div className="mb-4 md:mb-6 animate-fade-in">
+            <Badge variant="secondary" className="text-xs sm:text-sm font-medium">
+              <span className="font-bold">{activeListId} - {activeListName}</span>
+            </Badge>
+          </div>
+        )}
 
-        <ScrollArea className="h-[420px] md:h-[calc(100vh-220px)] [&>[data-radix-scroll-area-scrollbar]]:opacity-100">
-          <div className="pr-3 pb-24 md:pb-28">
-            <div className="animate-fade-in pb-8 md:pb-10">
-              {currentStep === "qualification" ? (
-                <>
-                  <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
-                    <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-                      {processedContent}
-                    </pre>
-                  </div>
-                <QualificationForm 
-                  onSubmitRef={onQualificationSubmitRef}
-                  onComplete={() => onStepChange("closingSuccess")}
-                />
-                </>
-              ) : (
-                <div className="prose prose-sm md:prose-base max-w-none">
-                  <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-                    {processedContent}
-                  </pre>
-                </div>
-              )}
-            </div>
+        <ScrollArea className="h-[calc(100vh-140px)] md:h-[calc(100vh-160px)] [&>[data-radix-scroll-area-scrollbar]]:opacity-100">
+          <div className="pr-3 space-y-6 md:space-y-8 pb-8">
+            {SECTION_ORDER.map((section, index) => {
+              const sectionData = scriptData[section.id];
+              const Icon = section.icon;
+              const processedContent = sectionData 
+                ? replaceScriptVariables(sectionData.content, leadData) 
+                : '';
+
+              if (!sectionData) return null;
+
+              return (
+                <Card 
+                  key={section.id} 
+                  id={section.id}
+                  className="border-l-4 shadow-sm hover:shadow-md transition-shadow"
+                  style={{ borderLeftColor: `hsl(var(--${section.id === 'greeting' ? 'primary' : section.id === 'qualification' ? 'primary' : section.id === 'objectionHandling' ? 'warning' : section.id === 'closingNotInterested' ? 'destructive' : 'success'}))` }}
+                >
+                  <CardHeader className="pb-2 md:pb-3">
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className={`p-1.5 md:p-2 rounded-lg bg-muted ${section.color}`}>
+                        <Icon className="h-4 w-4 md:h-5 md:w-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] md:text-xs font-medium">
+                            {index + 1} of {SECTION_ORDER.length}
+                          </Badge>
+                        </div>
+                        <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-foreground mt-1">
+                          {section.title}
+                        </CardTitle>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {section.id === "qualification" ? (
+                      <>
+                        <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
+                          <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
+                            {processedContent}
+                          </pre>
+                        </div>
+                        <Separator className="my-4 md:my-6" />
+                        <QualificationForm 
+                          onSubmitRef={onQualificationSubmitRef}
+                        />
+                      </>
+                    ) : (
+                      <div className="prose prose-sm md:prose-base max-w-none">
+                        <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
+                          {processedContent}
+                        </pre>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </ScrollArea>
       </div>
