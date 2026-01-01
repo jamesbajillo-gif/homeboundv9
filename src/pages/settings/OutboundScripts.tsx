@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ScriptEditor } from "@/components/settings/ScriptEditor";
+import { QualificationScriptSelector } from "@/components/settings/QualificationScriptSelector";
 
 const OutboundScripts = () => {
   const navigate = useNavigate();
@@ -40,7 +41,10 @@ const OutboundScripts = () => {
               </TabsContent>
 
               <TabsContent value="qualification" className="mt-6">
-                <ScriptEditor stepName="outbound_qualification" stepTitle="Qualification Questions" />
+                <QualificationScriptSelector 
+                  stepName="outbound_qualification" 
+                  stepTitle="Qualification Questions" 
+                />
               </TabsContent>
 
               <TabsContent value="objection" className="mt-6">
