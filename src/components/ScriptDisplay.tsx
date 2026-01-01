@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QualificationForm } from "@/components/QualificationForm";
 import { mysqlApi } from "@/lib/mysqlApi";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
@@ -12,6 +12,7 @@ import { useGroup } from "@/contexts/GroupContext";
 import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { Separator } from "@/components/ui/separator";
+import { ScriptNavigation } from "./ScriptNavigation";
 
 type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
 
@@ -33,9 +34,39 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const [usingListIdScripts, setUsingListIdScripts] = useState(false);
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [activeListName, setActiveListName] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<ScriptStep>(SECTION_ORDER[0].id);
   const { groupType } = useGroup();
   const { leadData } = useVICI();
   const viciListId = leadData?.list_id;
+
+  // Handle navigation to a section
+  const handleNavigate = useCallback((sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  // Intersection Observer to track active section
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id as ScriptStep);
+          }
+        });
+      },
+      { threshold: 0.3, rootMargin: '-80px 0px -50% 0px' }
+    );
+
+    SECTION_ORDER.forEach((section) => {
+      const element = document.getElementById(section.id);
+      if (element) observer.observe(element);
+    });
+
+    return () => observer.disconnect();
+  }, [scriptData]);
 
   // Fetch scripts using React Query - auto-refreshes when cache is invalidated
   const { data: fetchedScriptData, isLoading: loading } = useQuery({
@@ -201,7 +232,12 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
         )}
 
         <ScrollArea className="h-[calc(100vh-140px)] md:h-[calc(100vh-160px)] [&>[data-radix-scroll-area-scrollbar]]:opacity-100">
-          <div className="pr-3 space-y-6 md:space-y-8 pb-8">
+          <ScriptNavigation
+            sections={SECTION_ORDER}
+            activeSection={activeSection}
+            onNavigate={handleNavigate}
+          />
+          <div className="pr-3 space-y-6 md:space-y-8 pb-8 pt-2">
             {SECTION_ORDER.map((section, index) => {
               const sectionData = scriptData[section.id];
               const Icon = section.icon;
