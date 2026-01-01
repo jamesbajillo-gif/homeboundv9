@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import { mysqlApi } from "@/lib/mysql-api";
+import { mysqlApi } from "@/lib/mysqlApi";
 import { toast } from "sonner";
 import { Loader2, Zap, ExternalLink, Copy, CheckCheck, Plus, Edit, Trash2, TestTube } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,6 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { ZapierPayloadConfig } from "./ZapierPayloadConfig";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { QUERY_KEYS } from "@/lib/queryKeys";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 
 interface ZapierWebhook {
-  id: number;
+  id: number | string;
   webhook_url: string;
   webhook_name: string | null;
   description: string | null;
@@ -28,9 +31,7 @@ interface ZapierWebhook {
 }
 
 export const ZapierSettings = () => {
-  const [webhooks, setWebhooks] = useState<ZapierWebhook[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<number | string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<ZapierWebhook | null>(null);
   const [formData, setFormData] = useState({
@@ -39,29 +40,24 @@ export const ZapierSettings = () => {
     description: '',
     is_active: true,
   });
+  const [saving, setSaving] = useState(false);
   const accessLevel = localStorage.getItem('settings_access_level') || 'kainkatae';
 
-  useEffect(() => {
-    fetchWebhooks();
-  }, []);
+  const queryClient = useQueryClient();
 
-  const fetchWebhooks = async () => {
-    try {
-      setLoading(true);
-      const data = await mysqlApi.fetchAll<ZapierWebhook>("zapier_settings");
-      
-      // Sort by created_at (newest first) - assuming id is auto-increment
-      const sortedData = data.sort((a, b) => b.id - a.id);
-      setWebhooks(sortedData);
-    } catch (error) {
-      console.error("Error fetching webhooks:", error);
-      toast.error("Failed to load Zapier webhooks");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch webhooks using React Query
+  const { data: webhooks = [], isLoading: loading } = useQuery({
+    queryKey: QUERY_KEYS.zapier.all,
+    queryFn: async () => {
+      const data = await mysqlApi.getAll<ZapierWebhook>("homebound_zapier_settings", {
+        orderBy: "created_at",
+        order: "DESC"
+      });
+      return data;
+    },
+  });
 
-  const handleCopyUrl = async (url: string, id: number) => {
+  const handleCopyUrl = async (url: string, id: number | string) => {
     try {
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
@@ -122,70 +118,78 @@ export const ZapierSettings = () => {
     }
 
     try {
-      setLoading(true);
+      setSaving(true);
 
       if (editingWebhook) {
         // Update existing webhook
-        await mysqlApi.update("zapier_settings", editingWebhook.id, {
+        await mysqlApi.updateById("homebound_zapier_settings", editingWebhook.id, {
           webhook_url: trimmedUrl,
           webhook_name: formData.webhook_name.trim() || null,
           description: formData.description.trim() || null,
-          is_active: formData.is_active ? 1 : 0,
+          is_active: formData.is_active,
         });
+
         toast.success("Webhook updated successfully!");
       } else {
         // Add new webhook
-        await mysqlApi.create("zapier_settings", {
+        await mysqlApi.create("homebound_zapier_settings", {
           webhook_url: trimmedUrl,
           webhook_name: formData.webhook_name.trim() || null,
           description: formData.description.trim() || null,
-          is_active: formData.is_active ? 1 : 0,
+          is_active: formData.is_active,
         });
+
         toast.success("Webhook added successfully!");
       }
 
       setDialogOpen(false);
-      fetchWebhooks();
+      // Invalidate cache to refresh all components using webhooks
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.zapier.all });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.zapier.active });
     } catch (error: any) {
       console.error("Error saving webhook:", error);
-      if (error.message?.includes('Duplicate')) {
+      if (error.message && error.message.includes('Duplicate') || error.message.includes('unique')) {
         toast.error("A webhook with this URL already exists");
       } else {
-        toast.error("Failed to save webhook");
+        toast.error(error.message || "Failed to save webhook");
       }
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const handleDeleteWebhook = async (id: number) => {
+  const handleDeleteWebhook = async (id: number | string) => {
     if (!confirm("Are you sure you want to delete this webhook?")) {
       return;
     }
 
     try {
-      setLoading(true);
-      await mysqlApi.delete("zapier_settings", id);
+      setSaving(true);
+      await mysqlApi.deleteById("homebound_zapier_settings", id);
       toast.success("Webhook deleted successfully!");
-      fetchWebhooks();
+      // Invalidate cache to refresh all components using webhooks
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.zapier.all });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.zapier.active });
     } catch (error: any) {
       console.error("Error deleting webhook:", error);
-      toast.error("Failed to delete webhook");
+      toast.error(error.message || "Failed to delete webhook");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   const handleToggleActive = async (webhook: ZapierWebhook) => {
     try {
-      await mysqlApi.update("zapier_settings", webhook.id, { 
-        is_active: !webhook.is_active ? 1 : 0 
+      await mysqlApi.updateById("homebound_zapier_settings", webhook.id, {
+        is_active: !webhook.is_active
       });
       toast.success(`Webhook ${!webhook.is_active ? 'activated' : 'deactivated'}`);
-      fetchWebhooks();
+      // Invalidate cache to refresh all components using webhooks
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.zapier.all });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.zapier.active });
     } catch (error: any) {
       console.error("Error toggling webhook:", error);
-      toast.error("Failed to update webhook");
+      toast.error(error.message || "Failed to update webhook");
     }
   };
 
@@ -232,12 +236,10 @@ export const ZapierSettings = () => {
     } catch (error: any) {
       console.error("Error testing webhook:", error);
       toast.error("Failed to test webhook. Please check the URL and try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
-  if (loading && webhooks.length === 0) {
+  if (loading) {
     return (
       <Card className="p-6">
         <div className="flex items-center justify-center h-64">
@@ -384,6 +386,11 @@ export const ZapierSettings = () => {
       </div>
     </Card>
 
+    {/* Payload Configuration - Read Only */}
+    <div className="mt-6">
+      <ZapierPayloadConfig />
+    </div>
+
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
@@ -442,7 +449,7 @@ export const ZapierSettings = () => {
           <Button variant="outline" onClick={() => setDialogOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSaveWebhook} disabled={loading}>
+          <Button onClick={handleSaveWebhook} disabled={saving || loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
           </Button>
         </DialogFooter>

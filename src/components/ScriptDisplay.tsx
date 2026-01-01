@@ -1,13 +1,16 @@
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QualificationForm } from "@/components/QualificationForm";
-import { mysqlApi } from "@/lib/mysql-api";
+import { mysqlApi } from "@/lib/mysqlApi";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
 import { useGroup } from "@/contexts/GroupContext";
+import { useQuery } from "@tanstack/react-query";
+import { QUERY_KEYS } from "@/lib/queryKeys";
 
 type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
 
@@ -19,62 +22,142 @@ interface ScriptDisplayProps {
 
 export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmitRef }: ScriptDisplayProps) => {
   const [scriptData, setScriptData] = useState<Record<ScriptStep, { title: string; content: string }> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [usingListIdScripts, setUsingListIdScripts] = useState(false);
+  const [activeListId, setActiveListId] = useState<string | null>(null);
+  const [activeListName, setActiveListName] = useState<string | null>(null);
   const { groupType } = useGroup();
   const { leadData } = useVICI();
+  const viciListId = leadData?.list_id;
 
+  // Fetch scripts using React Query - auto-refreshes when cache is invalidated
+  const { data: fetchedScriptData, isLoading: loading } = useQuery({
+    queryKey: ['scripts', 'display', groupType, viciListId],
+    queryFn: async () => {
+      return await fetchScriptDataInternal();
+    },
+    enabled: !!groupType,
+    staleTime: 0, // Always refetch to get latest data
+  });
+
+  // Update local state when React Query data changes
   useEffect(() => {
-    fetchScriptData();
-  }, [groupType]);
+    if (fetchedScriptData) {
+      setScriptData(fetchedScriptData.scripts);
+      setUsingListIdScripts(fetchedScriptData.usingListIdScripts);
+      setActiveListId(fetchedScriptData.activeListId);
+      setActiveListName(fetchedScriptData.activeListName);
+    }
+  }, [fetchedScriptData]);
 
-  const fetchScriptData = async () => {
-    try {
-      // Map step names based on group type
-      const prefix = groupType === "outbound" ? "outbound_" : "";
-      const stepMapping: Record<ScriptStep, string> = {
-        greeting: `${prefix}greeting`,
-        objectionHandling: `${prefix}${groupType === "outbound" ? "objection" : "objectionHandling"}`,
-        qualification: `${prefix}qualification`,
-        closingNotInterested: `${prefix}closingNotInterested`,
-        closingSuccess: `${prefix}closingSuccess`,
-      };
+  // Helper: Check if all 5 required script steps are present
+  const isCompleteScriptSet = (scripts: Record<string, any>) => {
+    const requiredSteps: ScriptStep[] = [
+      'greeting',
+      'qualification',
+      'objectionHandling',
+      'closingNotInterested',
+      'closingSuccess'
+    ];
+    return requiredSteps.every(step => scripts[step]);
+  };
 
-      console.log("Fetching scripts for group:", groupType, "Step mapping:", stepMapping);
+  // Helper: Load default scripts based on group type
+  const loadDefaultScripts = async () => {
+    const prefix = groupType === "outbound" ? "outbound_" : "";
+    const stepMapping: Record<ScriptStep, string> = {
+      greeting: `${prefix}greeting`,
+      objectionHandling: `${prefix}${groupType === "outbound" ? "objection" : "objectionHandling"}`,
+      qualification: `${prefix}qualification`,
+      closingNotInterested: `${prefix}closingNotInterested`,
+      closingSuccess: `${prefix}closingSuccess`,
+    };
 
-      const allScripts = await mysqlApi.fetchAll<{
-        id: number;
+    const defaultData = await mysqlApi.findByFieldIn<{
+      step_name: string;
+      title: string;
+      content: string;
+    }>(
+      "homebound_script",
+      "step_name",
+      Object.values(stepMapping)
+    );
+
+    return defaultData.reduce((acc, item) => {
+      const stepEntry = Object.entries(stepMapping).find(([_, dbName]) => dbName === item.step_name);
+      if (stepEntry) {
+        const [stepKey] = stepEntry;
+        acc[stepKey as ScriptStep] = {
+          title: item.title,
+          content: item.content,
+        };
+      }
+      return acc;
+    }, {} as Record<ScriptStep, { title: string; content: string }>);
+  };
+
+  const fetchScriptDataInternal = async () => {
+    const viciListId = leadData?.list_id;
+    
+    // OPTIMIZATION: Check List ID first
+    if (viciListId && !viciListId.includes('--A--')) {
+      // Load List ID scripts FIRST
+      const listScripts = await mysqlApi.findByField<{
         step_name: string;
         title: string;
         content: string;
-      }>("homebound_script");
-
-      // Filter to only include scripts we need
-      const stepNames = Object.values(stepMapping);
-      const data = allScripts.filter(script => stepNames.includes(script.step_name));
-
-      if (data) {
-        const formattedData = data.reduce((acc, item) => {
-          // Find which step this belongs to
-          const stepEntry = Object.entries(stepMapping).find(([_, dbName]) => dbName === item.step_name);
-          if (stepEntry) {
-            const [stepKey] = stepEntry;
-            acc[stepKey as ScriptStep] = {
+        name: string;
+      }>(
+        "homebound_list_id_config",
+        "list_id",
+        viciListId
+      );
+      
+      if (listScripts && listScripts.length > 0) {
+        const displayName = listScripts[0]?.name || viciListId;
+        
+        // Format List ID scripts
+        const listIdScripts = listScripts.reduce((acc, item) => {
+          const stepKey = item.step_name as ScriptStep;
+          if (stepKey) {
+            acc[stepKey] = {
               title: item.title,
               content: item.content,
             };
           }
           return acc;
         }, {} as Record<ScriptStep, { title: string; content: string }>);
-
-        console.log("Formatted script data:", formattedData);
-        setScriptData(formattedData);
+        
+        // CHECK: Do we have ALL required scripts?
+        if (isCompleteScriptSet(listIdScripts)) {
+          return {
+            scripts: listIdScripts,
+            usingListIdScripts: true,
+            activeListId: viciListId,
+            activeListName: displayName,
+          };
+        } else {
+          // Continue to load defaults and merge (hybrid mode)
+          const defaultScripts = await loadDefaultScripts();
+          const mergedScripts = { ...defaultScripts, ...listIdScripts };
+          
+          return {
+            scripts: mergedScripts,
+            usingListIdScripts: true,
+            activeListId: viciListId,
+            activeListName: displayName,
+          };
+        }
       }
-    } catch (error) {
-      console.error("Error fetching script data:", error);
-      toast.error("Failed to load script data");
-    } finally {
-      setLoading(false);
     }
+    
+    // FALLBACK: Load defaults (no List ID or not found)
+    const defaultScripts = await loadDefaultScripts();
+    return {
+      scripts: defaultScripts,
+      usingListIdScripts: false,
+      activeListId: null,
+      activeListName: null,
+    };
   };
 
   if (loading) {
@@ -135,6 +218,15 @@ export const ScriptDisplay = ({ currentStep, onStepChange, onQualificationSubmit
   return (
     <div className="px-2 sm:px-4 pb-2">
       <div className="max-w-full mx-auto">
+        {/* List ID Script Indicator Badge */}
+      {usingListIdScripts && activeListId && activeListName && (
+        <div className="mb-3 animate-fade-in">
+          <Badge variant="secondary" className="text-xs font-medium">
+            <span className="font-bold">{activeListId} - {activeListName}</span>
+          </Badge>
+        </div>
+      )}
+        
         <div className="mb-2">
           <h1 className="text-lg sm:text-xl font-bold text-foreground">{stepTitles[currentStep]}</h1>
         </div>

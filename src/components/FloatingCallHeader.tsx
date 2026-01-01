@@ -4,38 +4,49 @@ import { cn } from "@/lib/utils";
 import { useVICI } from "@/contexts/VICIContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, ChevronDown, ChevronUp } from "lucide-react";
 import { GroupToggle } from "@/components/GroupToggle";
 import { formatInTimeZone } from "date-fns-tz";
+import { getAppSetting, setAppSetting } from "@/lib/migration";
 
 type CallStatus = "active" | "idle";
 
 export const FloatingCallHeader = () => {
   const [callStatus] = useState<CallStatus>("active");
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [debugMode, setDebugMode] = useState(() => localStorage.getItem('debug_mode') === 'true');
+  const [debugMode, setDebugMode] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const { leadData } = useVICI();
 
-  // Listen for debug mode changes
+  // Load debug mode from API on mount
   useEffect(() => {
-    const handleStorageChange = () => {
-      setDebugMode(localStorage.getItem('debug_mode') === 'true');
+    const loadDebugMode = async () => {
+      try {
+        // Try API first, fallback to localStorage
+        const apiDebugMode = await getAppSetting('debug_mode');
+        const localDebugMode = localStorage.getItem('debug_mode');
+        const debugValue = apiDebugMode || localDebugMode || 'false';
+        setDebugMode(debugValue === 'true');
+      } catch (error) {
+        console.error('Error loading debug mode:', error);
+        // Fallback to localStorage
+        setDebugMode(localStorage.getItem('debug_mode') === 'true');
+      }
     };
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('debug-mode-change', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('debug-mode-change', handleStorageChange);
+
+    loadDebugMode();
+
+    // Listen for debug mode changes from Settings page
+    const handleDebugChange = () => {
+      const localDebugMode = localStorage.getItem('debug_mode');
+      setDebugMode(localDebugMode === 'true');
     };
+
+    window.addEventListener('debug-mode-change', handleDebugChange);
+    return () => window.removeEventListener('debug-mode-change', handleDebugChange);
   }, []);
 
   // Get customer info from VICI lead data
-  console.log("=== Header Lead Data Debug ===");
-  console.log("Raw leadData object:", JSON.stringify(leadData, null, 2));
-  console.log("leadData.first_name (customer):", leadData.first_name);
-  console.log("leadData.last_name (customer):", leadData.last_name);
-  console.log("leadData.fullname (agent):", leadData.fullname);
-  
   // Build customer name from first_name + last_name (NOT fullname, which is agent)
   let customerName = 'Unknown';
   
@@ -46,15 +57,22 @@ export const FloatingCallHeader = () => {
     customerName = combined;
   }
   
-  console.log("Final computed customerName:", customerName);
-  
   const phoneNumber = (leadData.phone_number && leadData.phone_number !== '--A--phone_number--B--') 
     ? leadData.phone_number 
     : 'No phone';
-  const email = leadData.email;
+  const email = (leadData.email && leadData.email !== '--A--email--B--') ? leadData.email : undefined;
   const address = (leadData.address3 && leadData.address3 !== '--A--address3--B--') 
     ? leadData.address3 
     : undefined;
+  const address1 = (leadData.address1 && leadData.address1 !== '--A--address1--B--') ? leadData.address1 : undefined;
+  const city = (leadData.city && leadData.city !== '--A--city--B--') ? leadData.city : undefined;
+  const state = (leadData.state && leadData.state !== '--A--state--B--') ? leadData.state : undefined;
+  const postalCode = (leadData.postal_code && leadData.postal_code !== '--A--postal_code--B--') ? leadData.postal_code : undefined;
+  const leadId = (leadData.lead_id && leadData.lead_id !== '--A--lead_id--B--') ? leadData.lead_id : undefined;
+  const sourceId = (leadData.source_id && leadData.source_id !== '--A--source_id--B--') ? leadData.source_id : undefined;
+  const listId = (leadData.list_id && leadData.list_id !== '--A--list_id--B--') ? leadData.list_id : undefined;
+  const channelGroup = (leadData.channel_group && leadData.channel_group !== '--A--channel_group--B--') ? leadData.channel_group : undefined;
+  const mortgageBalance = (leadData.mortgage_balance && leadData.mortgage_balance !== '--A--mortgage_balance--B--') ? leadData.mortgage_balance : undefined;
 
   // Update date and time every second
   useEffect(() => {
@@ -76,62 +94,149 @@ export const FloatingCallHeader = () => {
   return (
     <>
       <div className="fixed top-0 left-0 right-0 z-50 bg-card border-b border-border shadow-header animate-fade-in">
-        <div className="max-w-full mx-auto px-2 sm:px-4">
+        {/* Main Header Row - Clickable */}
+        <div 
+          className={cn(
+            "max-w-full mx-auto px-2 sm:px-4 cursor-pointer transition-colors",
+            "hover:bg-muted/50",
+            isExpanded && "bg-muted/30"
+          )}
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
           <div className="flex items-center justify-between h-12 gap-2 sm:gap-3">
-          {/* Call Status & Info - Left Side */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-            <div className="flex items-center gap-1">
-              <div
-                className={cn(
-                  "w-2 h-2 rounded-full animate-pulse",
-                  callStatus === "active" && "bg-call-active",
-                  callStatus === "idle" && "bg-muted-foreground"
-                )}
-              />
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-medium text-xs",
-                  callStatus === "active" && "border-call-active text-call-active"
-                )}
-              >
-                {callStatus === "active" && "Active Call"}
-                {callStatus === "idle" && "No Active Call"}
-              </Badge>
-            </div>
+            {/* Call Status & Info - Left Side */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className="flex items-center gap-1">
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full animate-pulse",
+                    callStatus === "active" && "bg-call-active",
+                    callStatus === "idle" && "bg-muted-foreground"
+                  )}
+                />
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "font-medium text-xs",
+                    callStatus === "active" && "border-call-active text-call-active"
+                  )}
+                >
+                  {callStatus === "active" && "Active Call"}
+                  {callStatus === "idle" && "No Active Call"}
+                </Badge>
+              </div>
 
+              {callStatus !== "idle" && (
+                <>
+                  <div className="h-4 w-px bg-border" />
+                  <div className="flex items-center gap-1.5 min-w-0 text-xs sm:text-sm">
+                    <span className="font-medium text-foreground truncate">{customerName}</span>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-muted-foreground truncate">{phoneNumber}</span>
+                    {address && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <span className="text-muted-foreground truncate">{address}</span>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {/* Date/Time and Group Toggle - Right Side */}
             {callStatus !== "idle" && (
-              <>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <GroupToggle />
                 <div className="h-4 w-px bg-border" />
-                <div className="flex items-center gap-1.5 min-w-0 text-xs sm:text-sm">
-                  <span className="font-medium text-foreground truncate">{customerName}</span>
-                  <span className="text-muted-foreground">•</span>
-                  <span className="text-muted-foreground truncate">{phoneNumber}</span>
-                  {address && (
-                    <>
-                      <span className="text-muted-foreground">•</span>
-                      <span className="text-muted-foreground truncate">{address}</span>
-                    </>
+                <div className="flex flex-col items-end">
+                  <div className="text-xs sm:text-sm font-medium text-foreground">{getCurrentDate()}</div>
+                  <div className="text-[10px] font-mono text-muted-foreground">{getPSTTime()} PST</div>
+                </div>
+                {/* Expand/Collapse Icon */}
+                <div className="h-4 w-px bg-border" />
+                <div className="flex items-center">
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
-          
-          {/* Date/Time and Group Toggle - Right Side */}
-          {callStatus !== "idle" && (
-            <div className="flex items-center gap-2 sm:gap-3">
-              <GroupToggle />
-              <div className="h-4 w-px bg-border" />
-              <div className="flex flex-col items-end">
-                <div className="text-xs sm:text-sm font-medium text-foreground">{getCurrentDate()}</div>
-                <div className="text-[10px] font-mono text-muted-foreground">{getPSTTime()} PST</div>
+        </div>
+
+        {/* Expanded Rows - Two Additional Rows */}
+        {isExpanded && callStatus !== "idle" && (
+          <div className="border-t border-border bg-muted/20">
+            <div className="max-w-full mx-auto px-2 sm:px-4 py-2 space-y-2">
+              {/* First Additional Row - Always Visible */}
+              <div className="flex items-center gap-4 text-xs text-muted-foreground min-h-[20px]">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-medium text-foreground">Email:</span>
+                  <span className="truncate">{email || 'Not provided'}</span>
+                </div>
+                {leadId && (
+                  <>
+                    <div className="h-3 w-px bg-border" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-foreground">Lead ID:</span>
+                      <span>{leadId}</span>
+                    </div>
+                  </>
+                )}
+                {sourceId && (
+                  <>
+                    <div className="h-3 w-px bg-border" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-foreground">Source:</span>
+                      <span>{sourceId}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Second Additional Row - Always Visible */}
+              <div className="flex items-center gap-4 text-xs text-muted-foreground min-h-[20px]">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className="font-medium text-foreground">Address:</span>
+                  <span className="truncate">
+                    {[address1, city, state, postalCode].filter(Boolean).join(', ') || 'Not provided'}
+                  </span>
+                </div>
+                {listId && (
+                  <>
+                    <div className="h-3 w-px bg-border" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-foreground">List ID:</span>
+                      <span>{listId}</span>
+                    </div>
+                  </>
+                )}
+                {channelGroup && (
+                  <>
+                    <div className="h-3 w-px bg-border" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-foreground">Channel:</span>
+                      <span>{channelGroup}</span>
+                    </div>
+                  </>
+                )}
+                {mortgageBalance && (
+                  <>
+                    <div className="h-3 w-px bg-border" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-foreground">Mortgage Balance:</span>
+                      <span>{mortgageBalance}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </div>
 
     {/* Debug Panel */}
     {debugMode && (
@@ -143,7 +248,12 @@ export const FloatingCallHeader = () => {
               size="icon"
               variant="ghost"
               className="h-6 w-6"
-              onClick={() => {
+              onClick={async () => {
+                try {
+                  await setAppSetting('debug_mode', 'false', 'boolean', 'Debug mode toggle');
+                } catch (error) {
+                  console.error('Error saving debug mode:', error);
+                }
                 localStorage.setItem('debug_mode', 'false');
                 setDebugMode(false);
                 window.dispatchEvent(new Event('debug-mode-change'));

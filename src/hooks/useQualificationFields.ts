@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { mysqlApi } from '@/lib/mysql-api';
+import { useQuery } from '@tanstack/react-query';
+import { mysqlApi } from '@/lib/mysqlApi';
+import { QUERY_KEYS } from '@/lib/queryKeys';
 
 export interface FormField {
-  id: number;
+  id: number | string;
   field_name: string;
   field_label: string;
   field_type: string;
@@ -18,32 +19,20 @@ export interface FormField {
 }
 
 export const useQualificationFields = () => {
-  const [fields, setFields] = useState<FormField[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchFields();
-  }, []);
-
-  const fetchFields = async () => {
-    try {
-      setLoading(true);
-      const allFields = await mysqlApi.fetchAll<FormField>('qualification_form_fields');
-      
-      // Filter active fields and sort by display_order
-      const activeFields = allFields
-        .filter(field => field.is_active)
-        .sort((a, b) => a.display_order - b.display_order);
-
-      setFields(activeFields);
-    } catch (err: any) {
-      console.error('Error fetching qualification fields:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: fields = [], isLoading: loading, error } = useQuery({
+    queryKey: QUERY_KEYS.formFields.active,
+    queryFn: async () => {
+      const data = await mysqlApi.getAll<FormField>(
+        'homebound_qualification_form_fields',
+        {
+          where: { is_active: true },
+          orderBy: 'display_order',
+          order: 'ASC'
+        }
+      );
+      return data;
+    },
+  });
 
   const groupedFields = fields.reduce((acc, field) => {
     if (!acc[field.field_section]) {
@@ -53,5 +42,11 @@ export const useQualificationFields = () => {
     return acc;
   }, {} as Record<string, FormField[]>);
 
-  return { fields, groupedFields, loading, error, refetch: fetchFields };
+  return { 
+    fields, 
+    groupedFields, 
+    loading, 
+    error: error ? (error as Error).message : null,
+    refetch: () => {} // React Query handles refetching automatically
+  };
 };

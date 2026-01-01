@@ -11,7 +11,10 @@ import InboundScripts from "./pages/settings/InboundScripts";
 import OutboundScripts from "./pages/settings/OutboundScripts";
 import FormsSettings from "./pages/settings/FormsSettings";
 import ZapierPage from "./pages/settings/ZapierPage";
-import UserGroups from "./pages/settings/UserGroups";
+import ListIdManagement from "./pages/settings/ListIdManagement";
+import MySQLPage from "./pages/settings/MySQLPage";
+import ImportPage from "./pages/settings/ImportPage";
+import VICISettings from "./pages/settings/VICISettings";
 
 const queryClient = new QueryClient();
 
@@ -28,8 +31,11 @@ const App = () => (
             <Route path="/settings/inbound" element={<InboundScripts />} />
             <Route path="/settings/outbound" element={<OutboundScripts />} />
             <Route path="/settings/forms" element={<FormsSettings />} />
+            <Route path="/settings/listid" element={<ListIdManagement />} />
+            <Route path="/settings/vici" element={<VICISettings />} />
             <Route path="/settings/zapier" element={<ZapierPage />} />
-            <Route path="/settings/users" element={<UserGroups />} />
+            <Route path="/settings/mysql" element={<MySQLPage />} />
+            <Route path="/settings/import" element={<ImportPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

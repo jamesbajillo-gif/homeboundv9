@@ -15,4 +15,19 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Ensure proper chunking and asset handling
+    rollupOptions: {
+      output: {
+        // Ensure proper file extensions
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]'
+      }
+    },
+    // Ensure assets are properly referenced
+    assetsDir: 'assets',
+    // Generate source maps for debugging (optional)
+    sourcemap: false,
+  },
 }));

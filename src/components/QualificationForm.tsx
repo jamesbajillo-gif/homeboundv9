@@ -14,6 +14,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -21,6 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +41,10 @@ import { toast } from "sonner";
 import { useQualificationFields } from "@/hooks/useQualificationFields";
 import { useZapier } from "@/hooks/useZapier";
 import { useVICI } from "@/contexts/VICIContext";
+import { useGroup } from "@/contexts/GroupContext";
 import { Card } from "@/components/ui/card";
+import { mysqlApi } from "@/lib/mysqlApi";
+import { getAppSetting, setAppSetting, deleteAppSetting } from "@/lib/migration";
 
 interface QualificationFormProps {
   onComplete?: () => void;
@@ -51,14 +59,150 @@ const sectionNames: Record<string, string> = {
   financial: "Financial Information",
 };
 
+interface SectionScript {
+  title: string;
+  content: string;
+  enabled?: boolean[]; // Array of enabled states for each question
+}
+
+const DEFAULT_SCRIPTS: Record<string, SectionScript> = {
+  personal: {
+    title: "Personal Information",
+    content: "(No content - fields auto-populate from VICI)"
+  },
+  property: {
+    title: "Property Information",
+    content: `Type of property (single family, condo, etc.)
+
+Is this your Primary residence?
+is this a second home or its your investment proerty that we are talking about?
+
+Are you you looking for additional cash-out or your just looking for the lowest rate & terms?
+
+What is your property value? what have you seen online? or have you seen any current sales in your neighbourhood?`
+  },
+  loan: {
+    title: "Current Loan Information",
+    content: `Current first mortgage balance & payment
+
+Current second mortgage balance & payment (if applicable) (Please taker note in your end if they have and inform he Loan Officers)
+
+What is your interest rate for this mortgage( Applicable in both First & Second Mortgage)`
+  },
+  financial: {
+    title: "Financial Information",
+    content: `What is yor annual gross income?
+
+Approximate credit score?
+
+Total credit obligations (credit cards, personal loans, car loans, medical debts etc.)`
+  }
+};
+
 export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }: QualificationFormProps) => {
   const { fields, groupedFields, loading } = useQualificationFields();
   const { sendToAllActiveWebhooks, loading: zapierLoading } = useZapier();
   const { leadData } = useVICI();
+  const { groupType } = useGroup();
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [formData, setFormData] = useState<Record<string, any> | null>(null);
+  const [sectionScripts, setSectionScripts] = useState<Record<string, SectionScript>>(DEFAULT_SCRIPTS);
   
-  const DRAFT_KEY = 'qualification_form_draft';
+  // Build draft key based on listId and groupType
+  const getDraftKey = useCallback(() => {
+    const listId = leadData?.list_id && leadData.list_id !== '--A--list_id--B--' 
+      ? leadData.list_id 
+      : 'default';
+    return `qualification_form_draft_${listId}_${groupType}`;
+  }, [leadData?.list_id, groupType]);
+
+  // Fetch qualification scripts from database (dynamic based on groupType)
+  useEffect(() => {
+    const fetchScripts = async () => {
+      try {
+        // Determine step_name based on groupType
+        const stepName = groupType === "outbound" ? "outbound_qualification" : "qualification";
+        
+        const data = await mysqlApi.findOneByField<{
+          step_name: string;
+          content: string;
+        }>(
+          "homebound_script",
+          "step_name",
+          stepName
+        );
+
+        if (data && data.content) {
+          try {
+            const parsed = JSON.parse(data.content);
+            if (parsed && typeof parsed === 'object' && 'personal' in parsed) {
+              // Filter out test data and invalid content
+              const testDataPatterns = ['mysql', 'test', 'sucess', 'success test', '--A--', 'placeholder'];
+              const isValidContent = (content: string): boolean => {
+                if (!content || content.trim() === "") return false;
+                const contentLower = content.toLowerCase().trim();
+                // Check if content is just test data
+                return !testDataPatterns.some(pattern => contentLower.includes(pattern));
+              };
+              
+              // Clean and validate each section
+              const cleanedScripts: Record<string, SectionScript> = {};
+              let hasValidContent = false;
+              
+              for (const [key, section] of Object.entries(parsed)) {
+                if (section && typeof section === 'object' && 'content' in section) {
+                  const sectionContent = String(section.content || '').trim();
+                  if (isValidContent(sectionContent)) {
+                    const questions = parseQuestions(sectionContent);
+                    // Initialize enabled array - default all to true if not set
+                    const enabled = Array.isArray(section.enabled) 
+                      ? section.enabled 
+                      : questions.map(() => true);
+                    
+                    cleanedScripts[key] = {
+                      title: String(section.title || DEFAULT_SCRIPTS[key as keyof typeof DEFAULT_SCRIPTS]?.title || ''),
+                      content: sectionContent,
+                      enabled: enabled.slice(0, questions.length) // Ensure array length matches questions
+                    };
+                    hasValidContent = true;
+                  } else {
+                    // Use default for invalid/test content
+                    const defaultContent = DEFAULT_SCRIPTS[key as keyof typeof DEFAULT_SCRIPTS]?.content || '';
+                    const defaultQuestions = parseQuestions(defaultContent);
+                    cleanedScripts[key] = {
+                      ...DEFAULT_SCRIPTS[key as keyof typeof DEFAULT_SCRIPTS],
+                      enabled: defaultQuestions.map(() => true)
+                    };
+                  }
+                }
+              }
+              
+              if (hasValidContent) {
+                setSectionScripts(cleanedScripts);
+              } else {
+                // All content was invalid, use defaults
+                console.warn("Qualification script content appears to be test data or invalid. Using defaults.");
+                setSectionScripts(DEFAULT_SCRIPTS);
+              }
+            } else {
+              // Invalid structure, use defaults
+              console.warn("Qualification script has invalid structure. Using defaults.");
+              setSectionScripts(DEFAULT_SCRIPTS);
+            }
+          } catch (parseError) {
+            console.error("Could not parse qualification script JSON:", parseError);
+            console.warn("Using default qualification scripts.");
+            setSectionScripts(DEFAULT_SCRIPTS);
+          }
+        }
+        // If no data, keep DEFAULT_SCRIPTS
+      } catch (error: any) {
+        console.error("Error fetching qualification scripts:", error);
+      }
+    };
+
+    fetchScripts();
+  }, [groupType]);
 
   // Build dynamic schema from fields
   const buildSchema = () => {
@@ -103,31 +247,72 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     }, {} as Record<string, any>),
   });
 
-  // Auto-save to localStorage
-  const saveDraft = useCallback((data: Record<string, any>) => {
+  // Auto-save to API (with localStorage fallback)
+  const saveDraft = useCallback(async (data: Record<string, any>) => {
+    const draftKey = getDraftKey();
+    const draftData = JSON.stringify(data);
+    
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+      // Save to API
+      await setAppSetting(
+        draftKey,
+        draftData,
+        'json',
+        `Qualification form draft for listId: ${leadData?.list_id || 'default'}, groupType: ${groupType}`
+      );
     } catch (error) {
-      console.error('Error saving draft:', error);
+      console.error('Error saving draft to API:', error);
     }
-  }, [DRAFT_KEY]);
+    
+    // Also save to localStorage for backward compatibility
+    try {
+      localStorage.setItem(draftKey, draftData);
+    } catch (error) {
+      console.error('Error saving draft to localStorage:', error);
+    }
+  }, [getDraftKey, leadData?.list_id, groupType]);
 
   // Load draft on mount
   useEffect(() => {
-    try {
-      const savedDraft = localStorage.getItem(DRAFT_KEY);
-      if (savedDraft) {
-        const draft = JSON.parse(savedDraft);
-        // Only restore if we have actual data
-        if (Object.keys(draft).length > 0) {
-          form.reset(draft);
-          toast.info('Draft restored');
+    const loadDraft = async () => {
+      const draftKey = getDraftKey();
+      
+      try {
+        // Try to load from API first
+        const apiDraft = await getAppSetting(draftKey);
+        if (apiDraft) {
+          try {
+            const draft = JSON.parse(apiDraft);
+            if (Object.keys(draft).length > 0) {
+              form.reset(draft);
+              toast.info('Draft restored');
+              return;
+            }
+          } catch (parseError) {
+            console.error('Error parsing API draft:', parseError);
+          }
         }
+      } catch (error) {
+        console.error('Error loading draft from API:', error);
       }
-    } catch (error) {
-      console.error('Error loading draft:', error);
-    }
-  }, [DRAFT_KEY]);
+      
+      // Fallback to localStorage
+      try {
+        const savedDraft = localStorage.getItem(draftKey);
+        if (savedDraft) {
+          const draft = JSON.parse(savedDraft);
+          if (Object.keys(draft).length > 0) {
+            form.reset(draft);
+            toast.info('Draft restored');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading draft from localStorage:', error);
+      }
+    };
+
+    loadDraft();
+  }, [getDraftKey, form]);
 
   // Auto-save on form value changes
   useEffect(() => {
@@ -273,6 +458,16 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     const getZapierFieldName = (fieldName: string, fallback: string) => 
       fieldMapping.get(fieldName) || fallback;
 
+    // Helper function to get VICI field value or default to "0"
+    const getVICIFieldValue = (fieldName: string): string => {
+      const value = leadData[fieldName];
+      // Check if value exists and is not a placeholder
+      if (value && value !== '--A----B--' && !value.startsWith('--A--')) {
+        return value;
+      }
+      return '0';
+    };
+
     // Prepare Zapier payload using database-configured field mappings
     const zapierPayload: Record<string, any> = {
       // Source ID
@@ -311,13 +506,29 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
       }
     });
 
+    // Add specific supported fields with default value "0" if not provided
+    const supportedFields = ['fico_score', 'ltv', 'credit_grade', 'mortgage_balance', 'ssn'];
+    supportedFields.forEach((fieldName) => {
+      zapierPayload[fieldName] = getVICIFieldValue(fieldName);
+    });
+
     console.log('Qualification data:', zapierPayload);
     
     try {
       await sendToAllActiveWebhooks(zapierPayload);
       
       // Clear draft on successful submission
-      localStorage.removeItem(DRAFT_KEY);
+      const draftKey = getDraftKey();
+      try {
+        await deleteAppSetting(draftKey);
+      } catch (error) {
+        console.error('Error deleting draft from API:', error);
+      }
+      try {
+        localStorage.removeItem(draftKey);
+      } catch (error) {
+        console.error('Error deleting draft from localStorage:', error);
+      }
       
       if (testMode) {
         toast.success('Test data sent to Zapier! Check your Zap history to confirm receipt.');
@@ -354,11 +565,115 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     return '$' + parseInt(num).toLocaleString();
   };
 
-  const renderField = (field: any) => {
+  // Helper function to parse questions from script content
+  const parseQuestions = (content: string): string[] => {
+    if (!content || content.trim() === "" || content.includes("(No content")) {
+      return [];
+    }
+    
+    // Split by newlines and filter out empty lines
+    return content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith('(') && !line.startsWith('['));
+  };
+
+  // Helper function to match questions to fields (fuzzy matching)
+  const matchQuestionToField = (question: string, fields: any[]): any | null => {
+    const questionLower = question.toLowerCase();
+    
+    // Try to match based on keywords
+    for (const field of fields) {
+      const labelLower = field.field_label.toLowerCase();
+      const nameLower = field.field_name.toLowerCase();
+      
+      // Check for common keywords
+      if (questionLower.includes('property type') || questionLower.includes('type of property')) {
+        if (nameLower.includes('property_type')) return field;
+      }
+      if (questionLower.includes('primary residence') || questionLower.includes('occupancy') || questionLower.includes('second home') || questionLower.includes('investment property')) {
+        if (nameLower.includes('occupancy')) return field;
+      }
+      if (questionLower.includes('cash-out') || questionLower.includes('refinance type') || questionLower.includes('lowest rate')) {
+        if (nameLower.includes('refinance_type')) return field;
+      }
+      if (questionLower.includes('property value') || questionLower.includes('value')) {
+        if (nameLower.includes('property_value')) return field;
+      }
+      if (questionLower.includes('mortgage balance') || questionLower.includes('balance')) {
+        if (nameLower.includes('mortgage_balance')) return field;
+      }
+      if (questionLower.includes('interest rate') || questionLower.includes('rate')) {
+        if (nameLower.includes('interest_rate')) return field;
+      }
+      if (questionLower.includes('annual income') || questionLower.includes('income') || questionLower.includes('gross income')) {
+        if (nameLower.includes('annual_income')) return field;
+      }
+      if (questionLower.includes('credit score') || questionLower.includes('credit')) {
+        if (nameLower.includes('credit_score')) return field;
+      }
+      if (questionLower.includes('debt') || questionLower.includes('obligations')) {
+        if (nameLower.includes('debt')) return field;
+      }
+    }
+    
+    return null;
+  };
+
+  const renderField = (field: any, showLabel: boolean = false) => {
     // Phone number field should be disabled/read-only
     const isReadOnly = field.field_type === 'phone';
     
     if (field.field_type === 'select') {
+      const options = field.field_options?.options || [];
+      const shouldUseRadio = options.length <= 4 && options.length > 0; // Use radio for 4 or fewer options
+      
+      if (shouldUseRadio) {
+        return (
+          <FormField
+            key={field.id}
+            control={form.control}
+            name={field.field_name}
+            render={({ field: formField }) => (
+              <FormItem>
+                {showLabel && (
+                  <FormLabel className="text-base font-medium">
+                    {field.field_label}
+                    {field.is_required && <span className="text-destructive ml-1">*</span>}
+                  </FormLabel>
+                )}
+                <FormControl>
+                  <RadioGroup
+                    onValueChange={formField.onChange}
+                    value={formField.value || ""}
+                    className="flex flex-col space-y-3 mt-1"
+                  >
+                    {options.filter((opt: any) => opt.value !== "").map((option: any) => (
+                      <div key={option.value} className="flex items-center space-x-3">
+                        <RadioGroupItem value={option.value} id={`${field.field_name}-${option.value}`} />
+                        <Label 
+                          htmlFor={`${field.field_name}-${option.value}`}
+                          className="font-normal cursor-pointer text-sm leading-relaxed"
+                        >
+                          {option.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </FormControl>
+                {field.help_text && (
+                  <FormDescription className="text-xs italic mt-1">
+                    {field.help_text}
+                  </FormDescription>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        );
+      }
+      
+      // Otherwise use select dropdown
       return (
         <FormField
           key={field.id}
@@ -366,18 +681,20 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
           name={field.field_name}
           render={({ field: formField }) => (
             <FormItem>
-              <FormLabel>
-                {field.field_label}
-                {field.is_required && <span className="text-destructive">*</span>}
-              </FormLabel>
+              {showLabel && (
+                <FormLabel className="text-base font-medium">
+                  {field.field_label}
+                  {field.is_required && <span className="text-destructive ml-1">*</span>}
+                </FormLabel>
+              )}
               <Select onValueChange={formField.onChange} value={formField.value || ""}>
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder={field.placeholder || 'Select an option'} />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {field.field_options?.options?.filter((option: any) => option.value !== "").map((option: any) => (
+                  {options.filter((opt: any) => opt.value !== "").map((option: any) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -385,7 +702,7 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
                 </SelectContent>
               </Select>
               {field.help_text && (
-                <FormDescription className="text-xs italic">
+                <FormDescription className="text-xs italic mt-1">
                   {field.help_text}
                 </FormDescription>
               )}
@@ -402,10 +719,12 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
           name={field.field_name}
           render={({ field: formField }) => (
             <FormItem>
-              <FormLabel>
-                {field.field_label}
-                {field.is_required && <span className="text-destructive">*</span>}
-              </FormLabel>
+              {showLabel && (
+                <FormLabel className="text-base font-medium">
+                  {field.field_label}
+                  {field.is_required && <span className="text-destructive ml-1">*</span>}
+                </FormLabel>
+              )}
               <FormControl>
                 <Input
                   {...formField}
@@ -413,10 +732,11 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
                   onChange={(e) => {
                     formField.onChange(formatCurrency(e.target.value));
                   }}
+                  className="w-full"
                 />
               </FormControl>
               {field.help_text && (
-                <FormDescription className="text-xs italic">
+                <FormDescription className="text-xs italic mt-1">
                   {field.help_text}
                 </FormDescription>
               )}
@@ -433,10 +753,12 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
           name={field.field_name}
           render={({ field: formField }) => (
             <FormItem>
-              <FormLabel>
-                {field.field_label}
-                {field.is_required && <span className="text-destructive">*</span>}
-              </FormLabel>
+              {showLabel && (
+                <FormLabel className="text-base font-medium">
+                  {field.field_label}
+                  {field.is_required && <span className="text-destructive ml-1">*</span>}
+                </FormLabel>
+              )}
               <FormControl>
                 <Input
                   {...formField}
@@ -445,10 +767,11 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
                     const value = e.target.value.replace(/[^0-9.]/g, '');
                     formField.onChange(value ? value + '%' : '');
                   }}
+                  className="w-full"
                 />
               </FormControl>
               {field.help_text && (
-                <FormDescription className="text-xs italic">
+                <FormDescription className="text-xs italic mt-1">
                   {field.help_text}
                 </FormDescription>
               )}
@@ -465,21 +788,23 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
           name={field.field_name}
           render={({ field: formField }) => (
             <FormItem>
-              <FormLabel>
-                {field.field_label}
-                {field.is_required && <span className="text-destructive">*</span>}
-              </FormLabel>
+              {showLabel && (
+                <FormLabel className="text-base font-medium">
+                  {field.field_label}
+                  {field.is_required && <span className="text-destructive ml-1">*</span>}
+                </FormLabel>
+              )}
               <FormControl>
                 <Input
                   type={field.field_type === 'email' ? 'email' : field.field_type === 'date' ? 'date' : 'text'}
                   placeholder={field.placeholder || ''}
                   disabled={isReadOnly}
-                  className={isReadOnly ? 'bg-muted cursor-not-allowed' : ''}
+                  className={`w-full ${isReadOnly ? 'bg-muted cursor-not-allowed' : ''}`}
                   {...formField}
                 />
               </FormControl>
               {field.help_text && (
-                <FormDescription className="text-xs italic">
+                <FormDescription className="text-xs italic mt-1">
                   {field.help_text}
                 </FormDescription>
               )}
@@ -547,85 +872,155 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
   return (
     <Form {...form}>
       <form className="space-y-6">
-        <Card className="p-6">
-          <div className="space-y-6">
-            {/* Personal Information */}
-            {groupedOrderedFields.personal && (
-              <div className="grid grid-cols-2 gap-4">
-                {groupedOrderedFields.personal.map((field: any) => (
-                  <div key={field.id} className={field.fullWidth ? "col-span-2" : ""}>
-                    {renderField(field)}
+        <Card className="p-6 md:p-8">
+          <div className="space-y-8">
+            {/* Render each section with questions */}
+            {Object.entries(groupedOrderedFields)
+              .filter(([sectionKey]) => sectionKey !== 'personal') // Hide personal information section
+              .map(([sectionKey, sectionFields]: [string, any[]]) => {
+              const sectionScript = sectionScripts[sectionKey];
+              if (!sectionScript || !sectionFields.length) return null;
+              
+              const allQuestions = parseQuestions(sectionScript.content);
+              // Filter out disabled questions based on enabled array
+              const enabledStates = sectionScript.enabled || allQuestions.map(() => true);
+              const questions = allQuestions.filter((_, index) => enabledStates[index] !== false);
+              
+              return (
+                <div key={sectionKey} className="space-y-6">
+                  {/* Section Header */}
+                  <div className="border-b border-border pb-4">
+                    <h3 className="text-xl font-semibold text-foreground">
+                      {sectionScript.title}
+                    </h3>
                   </div>
-                ))}
-              </div>
-            )}
-            
-            {/* Property Information */}
-            {groupedOrderedFields.property && (
-              <>
-                <div className="border-t pt-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    {groupedOrderedFields.property.map((field: any) => (
-                      <div key={field.id} className={field.fullWidth ? "col-span-2" : ""}>
-                        {renderField(field)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-            
-            {/* Loan Information */}
-            {groupedOrderedFields.loan && (
-              <>
-                <div className="border-t pt-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    {groupedOrderedFields.loan.map((field: any) => (
-                      <div key={field.id} className={field.fullWidth ? "col-span-2" : ""}>
-                        {renderField(field)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-            
-            {/* Financial Information */}
-            {groupedOrderedFields.financial && (
-              <>
-                <div className="border-t pt-6">
-                  <div className="space-y-4">
-                    {groupedOrderedFields.financial.map((field: any, index: number) => (
-                      field.fullWidth ? (
-                        <div key={field.id}>
-                          {renderField(field)}
-                        </div>
-                      ) : null
-                    ))}
-                    <div className="grid grid-cols-2 gap-4">
-                      {groupedOrderedFields.financial
-                        .filter((field: any) => !field.fullWidth)
-                        .map((field: any) => (
-                          <div key={field.id}>
-                            {renderField(field)}
+                  
+                  {/* Render questions with fields */}
+                  {questions.length > 0 ? (
+                    <div className="space-y-6 pt-2">
+                      {questions.map((question, questionIndex) => {
+                        // Try to match question to a field
+                        const matchedField = matchQuestionToField(question, sectionFields);
+                        
+                        if (matchedField) {
+                          return (
+                            <div key={`${sectionKey}-q-${questionIndex}`} className="space-y-3">
+                              {/* Question */}
+                              <div className="flex items-start gap-3">
+                                <span className="text-base font-medium text-foreground min-w-[2rem] pt-0.5">
+                                  {questionIndex + 1}.
+                                </span>
+                                <p className="text-base font-medium text-foreground flex-1 leading-relaxed">
+                                  {question}
+                                  {matchedField.is_required && (
+                                    <span className="text-destructive ml-1">*</span>
+                                  )}
+                                </p>
+                              </div>
+                              
+                              {/* Input Field */}
+                              <div className="ml-11">
+                                {renderField(matchedField, false)}
+                                {matchedField.help_text && (
+                                  <p className="text-xs text-muted-foreground mt-1.5 italic">
+                                    {matchedField.help_text}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        // If no match, just show the question
+                        return (
+                          <div key={`${sectionKey}-q-${questionIndex}`} className="space-y-2">
+                            <div className="flex items-start gap-3">
+                              <span className="text-base font-medium text-foreground min-w-[2rem] pt-0.5">
+                                {questionIndex + 1}.
+                              </span>
+                              <p className="text-base font-medium text-foreground flex-1 leading-relaxed">
+                                {question}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Render any unmatched fields for this section */}
+                      {sectionFields
+                        .filter(field => !questions.some(q => matchQuestionToField(q, [field])))
+                        .map((field) => (
+                          <div key={field.id} className="space-y-3">
+                            <div className="flex items-start gap-3">
+                              <p className="text-base font-medium text-foreground flex-1 leading-relaxed">
+                                {field.field_label}
+                                {field.is_required && (
+                                  <span className="text-destructive ml-1">*</span>
+                                )}
+                              </p>
+                            </div>
+                            <div className="ml-11">
+                              {renderField(field, false)}
+                              {field.help_text && (
+                                <p className="text-xs text-muted-foreground mt-1.5 italic">
+                                  {field.help_text}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         ))}
                     </div>
-                  </div>
-                </div>
-              </>
-            )}
-            
-            {/* Remaining fields */}
-            {remainingFields.length > 0 && (
-              <div className="border-t pt-6">
-                <div className="grid grid-cols-2 gap-4">
-                  {remainingFields.map((field) => (
-                    <div key={field.id}>
-                      {renderField(field)}
+                  ) : (
+                    // If no questions parsed, show fields in traditional format
+                    <div className="space-y-5">
+                      {sectionFields.map((field) => (
+                        <div key={field.id} className="space-y-2.5">
+                          <FormLabel className="text-base font-medium">
+                            {field.field_label}
+                            {field.is_required && (
+                              <span className="text-destructive ml-1">*</span>
+                            )}
+                          </FormLabel>
+                          <div className="max-w-2xl">
+                            {renderField(field, false)}
+                          </div>
+                          {field.help_text && (
+                            <p className="text-xs text-muted-foreground italic mt-1.5">
+                              {field.help_text}
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
+              );
+            })}
+            
+            {/* Remaining fields not in any section */}
+            {remainingFields.length > 0 && (
+              <div className="border-t pt-6 space-y-5">
+                <h3 className="text-lg font-semibold text-foreground mb-4">
+                  Additional Information
+                </h3>
+                {remainingFields.map((field) => (
+                  <div key={field.id} className="space-y-2.5">
+                    <FormLabel className="text-base font-medium">
+                      {field.field_label}
+                      {field.is_required && (
+                        <span className="text-destructive ml-1">*</span>
+                      )}
+                    </FormLabel>
+                    <div className="max-w-2xl">
+                      {renderField(field, false)}
+                    </div>
+                    {field.help_text && (
+                      <p className="text-xs text-muted-foreground italic mt-1.5">
+                        {field.help_text}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -661,27 +1056,6 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
                   </Alert>
                 )}
                 
-                {/* Personal Information */}
-                {groupedOrderedFields.personal && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground mb-2">
-                      Personal Information
-                    </h4>
-                    <div className="space-y-2">
-                      {groupedOrderedFields.personal.map((field: any) => (
-                        <div key={field.id} className="grid grid-cols-2 gap-2">
-                          <p className="text-sm font-medium text-foreground">
-                            {field.field_label}:
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {formData?.[field.field_name] || '-'}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Property Information */}
                 {groupedOrderedFields.property && (
                   <div>

@@ -3,7 +3,7 @@
  * Based on official Zapier API documentation
  */
 
-import { mysqlApi } from './mysql-api';
+import { mysqlApi } from './mysqlApi';
 
 // Rate Limiter Implementation
 class RateLimiter {
@@ -267,9 +267,12 @@ export class ZapierIntegration {
 // Helper function to get active webhooks from database
 export const getActiveWebhooks = async (): Promise<string[]> => {
   try {
-    const allWebhooks = await mysqlApi.fetchAll<{ webhook_url: string; is_active: boolean }>('zapier_settings');
-    const activeWebhooks = allWebhooks.filter(w => w.is_active);
-    return activeWebhooks.map(w => w.webhook_url);
+    const data = await mysqlApi.getAll<{ webhook_url: string }>('zapier_settings', {
+      where: { is_active: true },
+      fields: ['webhook_url']
+    });
+
+    return data.map((w) => w.webhook_url);
   } catch (error) {
     console.error('Error fetching active webhooks:', error);
     return [];

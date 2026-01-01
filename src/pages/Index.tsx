@@ -5,6 +5,7 @@ import { ScriptDisplay } from "@/components/ScriptDisplay";
 import { FloatingActionButtons } from "@/components/FloatingActionButtons";
 import { VICILeadDisplay } from "@/components/VICILeadDisplay";
 import { PasswordDialog } from "@/components/PasswordDialog";
+import { ListIdBadge } from "@/components/ListIdBadge";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
@@ -39,6 +40,7 @@ const Index = () => {
         onStepChange={setCurrentStep}
         onQualificationSubmit={handleQualificationSubmit}
       />
+      <ListIdBadge />
       <PasswordDialog
         open={passwordDialogOpen}
         onOpenChange={setPasswordDialogOpen}
