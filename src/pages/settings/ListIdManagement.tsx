@@ -7,7 +7,7 @@ import { ArrowLeft, ListOrdered } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ListIdConfiguration } from "@/components/settings/ListIdConfiguration";
 import { ListIdScriptEditor } from "@/components/settings/ListIdScriptEditor";
-import { ListIdScriptEditorSectioned } from "@/components/settings/ListIdScriptEditorSectioned";
+import { ListIdQualificationSelector } from "@/components/settings/ListIdQualificationSelector";
 
 const ListIdManagement = () => {
   const navigate = useNavigate();
@@ -67,7 +67,7 @@ const ListIdManagement = () => {
                 </TabsContent>
 
                 <TabsContent value="qualification">
-                  <ListIdScriptEditorSectioned
+                  <ListIdQualificationSelector
                     listId={selectedListId}
                   />
                 </TabsContent>
