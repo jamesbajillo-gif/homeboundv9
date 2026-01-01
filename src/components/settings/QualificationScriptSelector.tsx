@@ -36,11 +36,18 @@ interface QualificationScriptSelectorProps {
   stepTitle: string;
 }
 
+interface SelectedQuestionAlt {
+  id: string;
+  text: string;
+}
+
 interface SelectedQuestion {
   sectionId: string;
   sectionTitle: string;
   questionId: string;
   questionText: string;
+  alternatives?: SelectedQuestionAlt[];
+  zapierFieldName?: string;
   order: number;
 }
 
@@ -177,6 +184,8 @@ export const QualificationScriptSelector = ({
               sectionTitle: section.title,
               questionId: question.id,
               questionText: question.question,
+              alternatives: question.alternatives?.map(alt => ({ id: alt.id, text: alt.text })),
+              zapierFieldName: question.zapierFieldName,
               order: order++,
             });
           }
@@ -361,20 +370,36 @@ export const QualificationScriptSelector = ({
                   {questions.map((q, idx) => (
                     <div
                       key={q.questionId}
-                      className="flex items-center gap-2 p-2 bg-muted/30 rounded text-sm group"
+                      className="p-2 bg-muted/30 rounded text-sm group"
                     >
-                      <span className="text-xs text-muted-foreground w-5">
-                        {idx + 1}.
-                      </span>
-                      <span className="flex-1">{q.questionText}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
-                        onClick={() => handleRemoveQuestion(q.questionId)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-5">
+                          {idx + 1}.
+                        </span>
+                        <span className="flex-1">{q.questionText}</span>
+                        {q.zapierFieldName && (
+                          <Badge variant="outline" className="text-[10px] h-4 font-mono">
+                            {q.zapierFieldName}
+                          </Badge>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive"
+                          onClick={() => handleRemoveQuestion(q.questionId)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      {q.alternatives && q.alternatives.length > 0 && (
+                        <div className="ml-7 mt-1 pl-2 border-l-2 border-muted space-y-0.5">
+                          {q.alternatives.map((alt, altIdx) => (
+                            <p key={alt.id} className="text-xs text-muted-foreground">
+                              Alt {altIdx + 1}: {alt.text}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
