@@ -27,16 +27,26 @@ interface SelectedQuestion {
   order: number;
 }
 
+interface ScriptQuestionAlt {
+  id: number;
+  script_name: string;
+  question_id: string;
+  alt_text: string;
+  alt_order: number;
+  is_default: number;
+}
+
 const STORAGE_KEY_PREFIX = "qualification_script_selected";
 
 /**
  * Hook to get the script-specific qualification config.
- * This merges the master config with script-specific selections and local alternatives.
+ * This merges the master config with script-specific selections and database alternatives.
  */
 export const useScriptQualificationConfig = () => {
   const { groupType } = useGroup();
   
   const stepName = groupType === "outbound" ? "outbound_qualification" : "qualification";
+  const scriptName = groupType === "outbound" ? "outbound_qualification" : "inbound_qualification";
   const storageKey = `${STORAGE_KEY_PREFIX}_${stepName}`;
   const masterConfigKey = `qualification_config_${groupType}`;
 
@@ -83,17 +93,45 @@ export const useScriptQualificationConfig = () => {
     },
   });
 
+  // Fetch script-specific alternatives from dedicated table
+  const { data: scriptAlternatives = [], isLoading: altsLoading } = useQuery({
+    queryKey: [QUERY_KEYS.scripts.all, "question_alts", scriptName],
+    queryFn: async (): Promise<ScriptQuestionAlt[]> => {
+      try {
+        const data = await mysqlApi.findByField<ScriptQuestionAlt>(
+          "homebound_script_question_alts",
+          "script_name",
+          scriptName,
+          { orderBy: "alt_order", order: "ASC" }
+        );
+        return data;
+      } catch (error) {
+        console.error("Error loading script alternatives:", error);
+        return [];
+      }
+    },
+  });
+
   // Build the merged config for display
   const getMergedConfig = (): QualificationConfig => {
     if (!masterConfig) return DEFAULT_QUALIFICATION_CONFIG;
     
-    // If no script selections, fall back to master config
-    if (!scriptSelections || scriptSelections.length === 0) {
-      return masterConfig;
-    }
+    // If no script selections, use master config but still merge in script alternatives
+    const baseConfig = scriptSelections && scriptSelections.length > 0
+      ? buildConfigFromSelections(masterConfig, scriptSelections)
+      : masterConfig;
 
+    // Merge script alternatives into all questions
+    return mergeScriptAlternatives(baseConfig, scriptAlternatives);
+  };
+
+  // Build config from script selections
+  const buildConfigFromSelections = (
+    master: QualificationConfig,
+    selections: SelectedQuestion[]
+  ): QualificationConfig => {
     // Group script selections by section
-    const selectionsBySectionId = scriptSelections.reduce((acc, sel) => {
+    const selectionsBySectionId = selections.reduce((acc, sel) => {
       if (!acc[sel.sectionId]) {
         acc[sel.sectionId] = [];
       }
@@ -106,16 +144,15 @@ export const useScriptQualificationConfig = () => {
     const processedSections = new Set<string>();
 
     // Process in order of selections
-    scriptSelections.forEach((sel) => {
+    selections.forEach((sel) => {
       if (processedSections.has(sel.sectionId)) return;
       processedSections.add(sel.sectionId);
 
       const sectionSelections = selectionsBySectionId[sel.sectionId] || [];
-      const masterSection = masterConfig.sections.find((s) => s.id === sel.sectionId);
+      const masterSection = master.sections.find((s) => s.id === sel.sectionId);
 
       // Build questions for this section
       const questions: QualificationQuestion[] = sectionSelections.map((selQ) => {
-        // Find the master question for base data
         const masterQuestion = masterSection?.questions.find(
           (q) => q.id === selQ.questionId
         );
@@ -124,7 +161,6 @@ export const useScriptQualificationConfig = () => {
         const masterAlts = masterQuestion?.alternatives || [];
         const localAlts = selQ.localAlternatives || [];
 
-        // Combine alternatives with source tracking
         const mergedAlternatives = [
           ...masterAlts.map((alt) => ({ ...alt, source: "master" as const })),
           ...localAlts.map((alt) => ({
@@ -162,19 +198,63 @@ export const useScriptQualificationConfig = () => {
     });
 
     return {
-      version: masterConfig.version,
+      version: master.version,
       sections: mergedSections,
     };
   };
 
-  const isLoading = masterLoading || selectionsLoading;
+  // Merge database script alternatives into config
+  const mergeScriptAlternatives = (
+    config: QualificationConfig,
+    dbAlternatives: ScriptQuestionAlt[]
+  ): QualificationConfig => {
+    if (dbAlternatives.length === 0) return config;
+
+    // Group alternatives by question_id
+    const altsByQuestion = dbAlternatives.reduce((acc, alt) => {
+      if (!acc[alt.question_id]) {
+        acc[alt.question_id] = [];
+      }
+      acc[alt.question_id].push(alt);
+      return acc;
+    }, {} as Record<string, ScriptQuestionAlt[]>);
+
+    return {
+      ...config,
+      sections: config.sections.map((section) => ({
+        ...section,
+        questions: section.questions.map((question) => {
+          const scriptAlts = altsByQuestion[question.id] || [];
+          if (scriptAlts.length === 0) return question;
+
+          // Merge script alternatives with existing ones
+          const existingAlts = question.alternatives || [];
+          const newAlts = scriptAlts.map((alt) => ({
+            id: `script_${alt.id}`,
+            text: alt.alt_text,
+            isDefault: alt.is_default === 1,
+            source: "script" as const,
+          }));
+
+          return {
+            ...question,
+            alternatives: [...existingAlts, ...newAlts],
+          };
+        }),
+      })),
+    };
+  };
+
+  const isLoading = masterLoading || selectionsLoading || altsLoading;
   const hasScriptSelections = scriptSelections && scriptSelections.length > 0;
 
   return {
     config: getMergedConfig(),
     masterConfig: masterConfig || DEFAULT_QUALIFICATION_CONFIG,
     scriptSelections: scriptSelections || [],
+    scriptAlternatives,
     hasScriptSelections,
     isLoading,
+    scriptName,
   };
 };
