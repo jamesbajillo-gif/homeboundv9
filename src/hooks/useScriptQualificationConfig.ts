@@ -114,12 +114,18 @@ export const useScriptQualificationConfig = () => {
 
   // Build the merged config for display
   const getMergedConfig = (): QualificationConfig => {
-    if (!masterConfig) return DEFAULT_QUALIFICATION_CONFIG;
+    // If no script-specific selections exist, return empty config (not master default)
+    if (!scriptSelections || scriptSelections.length === 0) {
+      return {
+        version: masterConfig?.version || "1.0.0",
+        sections: [],
+      };
+    }
     
-    // If no script selections, use master config but still merge in script alternatives
-    const baseConfig = scriptSelections && scriptSelections.length > 0
-      ? buildConfigFromSelections(masterConfig, scriptSelections)
-      : masterConfig;
+    if (!masterConfig) return { version: "1.0.0", sections: [] };
+    
+    // Build config from script selections
+    const baseConfig = buildConfigFromSelections(masterConfig, scriptSelections);
 
     // Merge script alternatives into all questions
     return mergeScriptAlternatives(baseConfig, scriptAlternatives);
