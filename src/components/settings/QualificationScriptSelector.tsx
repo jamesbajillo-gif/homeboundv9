@@ -112,12 +112,30 @@ export const QualificationScriptSelector = ({
     },
   });
 
-  // Update local state when data loads
+  // Update local state when data loads - enrich with master config data
   useEffect(() => {
-    if (savedSelections) {
+    if (savedSelections && masterConfig) {
+      // Enrich saved selections with current data from master config (alternatives, zapier fields, etc.)
+      const enriched = savedSelections.map((saved) => {
+        // Find the question in master config
+        for (const section of masterConfig.sections) {
+          const question = section.questions.find((q) => q.id === saved.questionId);
+          if (question) {
+            return {
+              ...saved,
+              questionText: question.question, // Update with latest text
+              alternatives: question.alternatives?.map((alt) => ({ id: alt.id, text: alt.text })),
+              zapierFieldName: question.zapierFieldName,
+            };
+          }
+        }
+        return saved; // Keep as-is if not found in master
+      });
+      setSelectedQuestions(enriched);
+    } else if (savedSelections) {
       setSelectedQuestions(savedSelections);
     }
-  }, [savedSelections]);
+  }, [savedSelections, masterConfig]);
 
   // Save mutation
   const saveMutation = useMutation({
