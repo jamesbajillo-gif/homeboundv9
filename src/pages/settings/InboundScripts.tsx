@@ -4,7 +4,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ScriptEditor } from "@/components/settings/ScriptEditor";
-import { SectionToggleList } from "@/components/settings/SectionToggleList";
 
 const InboundScripts = () => {
   const navigate = useNavigate();
@@ -44,11 +43,7 @@ const InboundScripts = () => {
                 <ScriptEditor stepName="objectionHandling" stepTitle="1a - Common Objections" />
               </TabsContent>
 
-              <TabsContent value="qualification" className="mt-6 space-y-6">
-                <SectionToggleList 
-                  scriptType="inbound" 
-                  title="Qualification Sections for Inbound"
-                />
+              <TabsContent value="qualification" className="mt-6">
                 <ScriptEditor stepName="qualification" stepTitle="2 - Qualification Questions" />
               </TabsContent>
 

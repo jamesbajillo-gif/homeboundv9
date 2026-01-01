@@ -36,14 +36,9 @@ export interface QualificationConfig {
   version: string;
 }
 
-// Empty default configuration - all forms are configured in /settings/forms
+// Default configuration - these questions match the existing DEFAULT_SCRIPTS structure
+// and map directly to database fields in homebound_qualification_form_fields
 export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
-  version: "1.0.0",
-  sections: [],
-};
-
-// Sample template that users can import to get started quickly
-export const SAMPLE_QUALIFICATION_CONFIG: QualificationConfig = {
   version: "1.0.0",
   sections: [
     {
@@ -236,7 +231,7 @@ export const convertLegacyScriptsToConfig = (
       .map(line => line.trim())
       .filter(line => line.length > 0 && !line.startsWith('(') && !line.startsWith('['));
 
-    const defaultSection = SAMPLE_QUALIFICATION_CONFIG.sections.find(s => s.id === sectionId);
+    const defaultSection = DEFAULT_QUALIFICATION_CONFIG.sections.find(s => s.id === sectionId);
 
     sections.push({
       id: sectionId,
