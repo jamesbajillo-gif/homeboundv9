@@ -57,8 +57,10 @@ import {
   Trash2,
   GripVertical,
   RotateCcw,
+  FolderPlus,
+  Pencil,
 } from "lucide-react";
-import { QualificationQuestion } from "@/config/qualificationConfig";
+import { QualificationQuestion, QualificationSection as SectionType } from "@/config/qualificationConfig";
 
 // Sortable Question Item Component
 interface SortableQuestionProps {
@@ -106,7 +108,6 @@ const SortableQuestion = ({
       className={`p-4 border rounded-lg ${!question.enabled ? 'opacity-60 bg-muted/50' : 'bg-card'} ${isDragging ? 'shadow-lg ring-2 ring-primary' : ''}`}
     >
       {isEditing ? (
-        // Edit mode
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Question Text</Label>
@@ -147,7 +148,6 @@ const SortableQuestion = ({
           </div>
         </div>
       ) : (
-        // View mode
         <div className="flex items-start gap-3">
           <button
             className="mt-1 cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-muted rounded"
@@ -200,6 +200,55 @@ const SortableQuestion = ({
   );
 };
 
+// Sortable Section Component
+interface SortableSectionProps {
+  section: SectionType;
+  children: React.ReactNode;
+}
+
+const SortableSection = ({ section, children }: SortableSectionProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: section.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={isDragging ? 'ring-2 ring-primary rounded-lg' : ''}>
+      <AccordionItem value={section.id} className="border rounded-lg px-4">
+        <AccordionTrigger className="hover:no-underline py-4">
+          <div className="flex items-center gap-3 flex-1">
+            <button
+              className="cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-muted rounded"
+              {...attributes}
+              {...listeners}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <span className="font-semibold">{section.title}</span>
+            <Badge variant={section.enabled ? "default" : "secondary"}>
+              {section.enabled
+                ? `${section.questions.filter((q) => q.enabled).length} questions`
+                : "Disabled"}
+            </Badge>
+          </div>
+        </AccordionTrigger>
+        {children}
+      </AccordionItem>
+    </div>
+  );
+};
+
 export const QuestionnaireSettings = () => {
   const {
     config,
@@ -210,6 +259,9 @@ export const QuestionnaireSettings = () => {
     addQuestion,
     removeQuestion,
     reorderQuestions,
+    addSection,
+    removeSection,
+    reorderSections,
     resetToDefaults,
   } = useQualificationConfig();
   const { fields } = useQualificationFields();
@@ -218,11 +270,14 @@ export const QuestionnaireSettings = () => {
     sectionId: string;
     questionId: string;
   } | null>(null);
+  const [editingSection, setEditingSection] = useState<string | null>(null);
   const [newQuestion, setNewQuestion] = useState<{
     sectionId: string;
     text: string;
     fieldName: string | null;
   } | null>(null);
+  const [showNewSection, setShowNewSection] = useState(false);
+  const [newSection, setNewSection] = useState({ title: "", description: "" });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -235,13 +290,12 @@ export const QuestionnaireSettings = () => {
     })
   );
 
-  // Get available fields that can be mapped to questions
   const availableFields = fields.map((f) => ({
     value: f.field_name,
     label: f.field_label,
   }));
 
-  const handleDragEnd = (event: DragEndEvent, sectionId: string) => {
+  const handleQuestionDragEnd = (event: DragEndEvent, sectionId: string) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -254,6 +308,19 @@ export const QuestionnaireSettings = () => {
       const reorderedQuestions = arrayMove(section.questions, oldIndex, newIndex);
       const questionIds = reorderedQuestions.map((q) => q.id);
       reorderQuestions(sectionId, questionIds);
+    }
+  };
+
+  const handleSectionDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = config.sections.findIndex((s) => s.id === active.id);
+      const newIndex = config.sections.findIndex((s) => s.id === over.id);
+
+      const reorderedSections = arrayMove(config.sections, oldIndex, newIndex);
+      const sectionIds = reorderedSections.map((s) => s.id);
+      reorderSections(sectionIds);
     }
   };
 
@@ -277,6 +344,31 @@ export const QuestionnaireSettings = () => {
     setNewQuestion(null);
   };
 
+  const handleAddSection = () => {
+    if (!newSection.title.trim()) {
+      toast.error("Section title is required");
+      return;
+    }
+
+    const sectionId = newSection.title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    
+    // Check for duplicate IDs
+    if (config.sections.some(s => s.id === sectionId)) {
+      toast.error("A section with this name already exists");
+      return;
+    }
+
+    addSection({
+      id: sectionId,
+      title: newSection.title.trim(),
+      description: newSection.description.trim() || undefined,
+      enabled: true,
+    });
+
+    setNewSection({ title: "", description: "" });
+    setShowNewSection(false);
+  };
+
   if (isLoading) {
     return (
       <Card className="p-6">
@@ -294,174 +386,301 @@ export const QuestionnaireSettings = () => {
           <Settings className="h-5 w-5 text-primary" />
           <h2 className="text-xl font-semibold">Questionnaire Configuration</h2>
         </div>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <RotateCcw className="h-4 w-4" />
-              Reset to Defaults
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Reset to Default Questions?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will replace all current questions with the default questionnaire. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={resetToDefaults}>Reset</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setShowNewSection(true)}
+          >
+            <FolderPlus className="h-4 w-4" />
+            Add Section
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset to Default Questions?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will replace all current sections and questions with the default questionnaire. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={resetToDefaults}>Reset</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
 
       <p className="text-muted-foreground mb-6">
-        Drag and drop to reorder questions. Each question can be mapped to a form field for data collection.
+        Drag sections and questions to reorder. Create custom sections and map questions to form fields.
       </p>
 
-      <Accordion type="multiple" defaultValue={config.sections.map((s) => s.id)} className="space-y-4">
-        {config.sections.map((section) => {
-          const sortedQuestions = [...section.questions].sort((a, b) => a.order - b.order);
+      {/* New Section Form */}
+      {showNewSection && (
+        <Card className="p-4 mb-6 border-2 border-dashed border-primary/50">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <FolderPlus className="h-4 w-4" />
+            Create New Section
+          </h3>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Section Title *</Label>
+              <Input
+                value={newSection.title}
+                onChange={(e) => setNewSection({ ...newSection, title: e.target.value })}
+                placeholder="e.g., Employment Information"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description (optional)</Label>
+              <Input
+                value={newSection.description}
+                onChange={(e) => setNewSection({ ...newSection, description: e.target.value })}
+                placeholder="e.g., Gather details about employment status"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowNewSection(false);
+                  setNewSection({ title: "", description: "" });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleAddSection} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Create Section
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
-          return (
-            <AccordionItem key={section.id} value={section.id} className="border rounded-lg px-4">
-              <AccordionTrigger className="hover:no-underline py-4">
-                <div className="flex items-center gap-3 flex-1">
-                  <span className="font-semibold">{section.title}</span>
-                  <Badge variant={section.enabled ? "default" : "secondary"}>
-                    {section.enabled
-                      ? `${section.questions.filter((q) => q.enabled).length} questions`
-                      : "Disabled"}
-                  </Badge>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pt-4 pb-6">
-                <div className="space-y-4">
-                  {/* Section toggle */}
-                  <div className="flex items-center justify-between pb-4 border-b">
-                    <div>
-                      <Label>Enable Section</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Show this section in the qualification form
-                      </p>
-                    </div>
-                    <Switch
-                      checked={section.enabled}
-                      onCheckedChange={(enabled) => updateSection(section.id, { enabled })}
-                    />
-                  </div>
+      {/* Sections with drag and drop */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleSectionDragEnd}
+      >
+        <SortableContext
+          items={config.sections.map((s) => s.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <Accordion type="multiple" defaultValue={config.sections.map((s) => s.id)} className="space-y-4">
+            {config.sections.map((section) => {
+              const sortedQuestions = [...section.questions].sort((a, b) => a.order - b.order);
 
-                  {/* Questions list with drag and drop */}
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event) => handleDragEnd(event, section.id)}
-                  >
-                    <SortableContext
-                      items={sortedQuestions.map((q) => q.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div className="space-y-3">
-                        {sortedQuestions.map((question, index) => (
-                          <SortableQuestion
-                            key={question.id}
-                            question={question}
-                            index={index}
-                            sectionId={section.id}
-                            availableFields={availableFields}
-                            isEditing={editingQuestion?.questionId === question.id}
-                            onEdit={() =>
-                              setEditingQuestion({
-                                sectionId: section.id,
-                                questionId: question.id,
-                              })
-                            }
-                            onCancelEdit={() => setEditingQuestion(null)}
-                            onUpdate={(updates) =>
-                              updateQuestion(section.id, question.id, updates)
-                            }
-                            onRemove={() => removeQuestion(section.id, question.id)}
+              return (
+                <SortableSection key={section.id} section={section}>
+                  <AccordionContent className="pt-4 pb-6">
+                    <div className="space-y-4">
+                      {/* Section settings */}
+                      <div className="flex items-center justify-between pb-4 border-b">
+                        <div className="flex-1">
+                          {editingSection === section.id ? (
+                            <div className="space-y-3">
+                              <div className="space-y-2">
+                                <Label>Section Title</Label>
+                                <Input
+                                  value={section.title}
+                                  onChange={(e) => updateSection(section.id, { title: e.target.value })}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Description</Label>
+                                <Input
+                                  value={section.description || ""}
+                                  onChange={(e) => updateSection(section.id, { description: e.target.value || undefined })}
+                                  placeholder="Optional description"
+                                />
+                              </div>
+                              <Button size="sm" onClick={() => setEditingSection(null)}>
+                                Done
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-4">
+                              <div>
+                                <Label>Enable Section</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  {section.description || "Show this section in the qualification form"}
+                                </p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingSection(section.id)}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={section.enabled}
+                            onCheckedChange={(enabled) => updateSection(section.id, { enabled })}
                           />
-                        ))}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Section?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently remove the "{section.title}" section and all its questions. This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => removeSection(section.id)}>
+                                  Delete Section
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
-                    </SortableContext>
-                  </DndContext>
 
-                  {/* New question form */}
-                  {newQuestion?.sectionId === section.id ? (
-                    <div className="p-4 border-2 border-dashed rounded-lg space-y-4">
-                      <div className="space-y-2">
-                        <Label>New Question</Label>
-                        <Textarea
-                          value={newQuestion.text}
-                          onChange={(e) =>
-                            setNewQuestion({ ...newQuestion, text: e.target.value })
-                          }
-                          placeholder="Enter your question..."
-                          rows={2}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Map to Field (optional)</Label>
-                        <Select
-                          value={newQuestion.fieldName || "none"}
-                          onValueChange={(value) =>
-                            setNewQuestion({
-                              ...newQuestion,
-                              fieldName: value === "none" ? null : value,
-                            })
-                          }
+                      {/* Questions list with drag and drop */}
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={(event) => handleQuestionDragEnd(event, section.id)}
+                      >
+                        <SortableContext
+                          items={sortedQuestions.map((q) => q.id)}
+                          strategy={verticalListSortingStrategy}
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a field to map" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">No field mapping</SelectItem>
-                            {availableFields.map((field) => (
-                              <SelectItem key={field.value} value={field.value}>
-                                {field.label}
-                              </SelectItem>
+                          <div className="space-y-3">
+                            {sortedQuestions.length === 0 && (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                No questions yet. Add your first question below.
+                              </p>
+                            )}
+                            {sortedQuestions.map((question, index) => (
+                              <SortableQuestion
+                                key={question.id}
+                                question={question}
+                                index={index}
+                                sectionId={section.id}
+                                availableFields={availableFields}
+                                isEditing={editingQuestion?.questionId === question.id}
+                                onEdit={() =>
+                                  setEditingQuestion({
+                                    sectionId: section.id,
+                                    questionId: question.id,
+                                  })
+                                }
+                                onCancelEdit={() => setEditingQuestion(null)}
+                                onUpdate={(updates) =>
+                                  updateQuestion(section.id, question.id, updates)
+                                }
+                                onRemove={() => removeQuestion(section.id, question.id)}
+                              />
                             ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex justify-end gap-2">
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+
+                      {/* New question form */}
+                      {newQuestion?.sectionId === section.id ? (
+                        <div className="p-4 border-2 border-dashed rounded-lg space-y-4">
+                          <div className="space-y-2">
+                            <Label>New Question</Label>
+                            <Textarea
+                              value={newQuestion.text}
+                              onChange={(e) =>
+                                setNewQuestion({ ...newQuestion, text: e.target.value })
+                              }
+                              placeholder="Enter your question..."
+                              rows={2}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Map to Field (optional)</Label>
+                            <Select
+                              value={newQuestion.fieldName || "none"}
+                              onValueChange={(value) =>
+                                setNewQuestion({
+                                  ...newQuestion,
+                                  fieldName: value === "none" ? null : value,
+                                })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a field to map" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No field mapping</SelectItem>
+                                {availableFields.map((field) => (
+                                  <SelectItem key={field.value} value={field.value}>
+                                    {field.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setNewQuestion(null)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={handleSaveNewQuestion}
+                              disabled={isSaving}
+                            >
+                              {isSaving ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              ) : null}
+                              Add Question
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
                         <Button
                           variant="outline"
-                          size="sm"
-                          onClick={() => setNewQuestion(null)}
+                          className="w-full gap-2"
+                          onClick={() => handleAddQuestion(section.id)}
                         >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={handleSaveNewQuestion}
-                          disabled={isSaving}
-                        >
-                          {isSaving ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : null}
+                          <Plus className="h-4 w-4" />
                           Add Question
                         </Button>
-                      </div>
+                      )}
                     </div>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={() => handleAddQuestion(section.id)}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Question
-                    </Button>
-                  )}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+                  </AccordionContent>
+                </SortableSection>
+              );
+            })}
+          </Accordion>
+        </SortableContext>
+      </DndContext>
+
+      {config.sections.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <FolderPlus className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          <p>No sections yet. Create your first section to get started.</p>
+        </div>
+      )}
     </Card>
   );
 };

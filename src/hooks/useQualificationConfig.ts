@@ -198,6 +198,50 @@ export const useQualificationConfig = () => {
     saveMutation.mutate(newConfig);
   };
 
+  const addSection = (section: Omit<QualificationConfig['sections'][0], 'questions'>) => {
+    if (!config) return;
+
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: [
+        ...config.sections,
+        {
+          ...section,
+          questions: [],
+        },
+      ],
+    };
+
+    saveMutation.mutate(newConfig);
+  };
+
+  const removeSection = (sectionId: string) => {
+    if (!config) return;
+
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: config.sections.filter(s => s.id !== sectionId),
+    };
+
+    saveMutation.mutate(newConfig);
+  };
+
+  const reorderSections = (sectionIds: string[]) => {
+    if (!config) return;
+
+    const sectionMap = new Map(config.sections.map(s => [s.id, s]));
+    const newSections = sectionIds
+      .map(id => sectionMap.get(id))
+      .filter((s): s is QualificationConfig['sections'][0] => s !== undefined);
+
+    const newConfig: QualificationConfig = {
+      ...config,
+      sections: newSections,
+    };
+
+    saveMutation.mutate(newConfig);
+  };
+
   const resetToDefaults = () => {
     saveMutation.mutate(DEFAULT_QUALIFICATION_CONFIG);
   };
@@ -212,6 +256,9 @@ export const useQualificationConfig = () => {
     addQuestion,
     removeQuestion,
     reorderQuestions,
+    addSection,
+    removeSection,
+    reorderSections,
     resetToDefaults,
     saveConfig: saveMutation.mutate,
   };
