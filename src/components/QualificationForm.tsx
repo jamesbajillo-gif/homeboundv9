@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { toast } from "sonner";
-import { useQualificationConfig } from "@/hooks/useQualificationConfig";
+import { useScriptQualificationConfig } from "@/hooks/useScriptQualificationConfig";
 import { useZapier } from "@/hooks/useZapier";
 import { useVICI } from "@/contexts/VICIContext";
 import { useGroup } from "@/contexts/GroupContext";
@@ -22,7 +22,7 @@ interface QualificationFormProps {
 }
 
 export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }: QualificationFormProps) => {
-  const { config, isLoading: configLoading } = useQualificationConfig();
+  const { config, isLoading: configLoading } = useScriptQualificationConfig();
   const { sendToAllActiveWebhooks, loading: zapierLoading } = useZapier();
   const { leadData } = useVICI();
   const { groupType } = useGroup();
