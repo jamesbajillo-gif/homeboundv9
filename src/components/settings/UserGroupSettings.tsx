@@ -42,7 +42,7 @@ export const UserGroupSettings = () => {
   const fetchUserGroups = async () => {
     try {
       setLoading(true);
-      const data = await mysqlApi.getAll<UserGroup>("user_groups");
+      const data = await mysqlApi.getAll<UserGroup>("homebound_user_groups");
       
       // Sort by id descending (newest first)
       const sortedData = data.sort((a, b) => b.id - a.id);
@@ -64,7 +64,7 @@ export const UserGroupSettings = () => {
     try {
       setAdding(true);
 
-      await mysqlApi.create("user_groups", {
+      await mysqlApi.create("homebound_user_groups", {
         user_identifier: newUserIdentifier.trim(),
         group_type: newGroupType,
       });
@@ -87,7 +87,7 @@ export const UserGroupSettings = () => {
 
   const handleRemoveUser = async (id: number, userIdentifier: string) => {
     try {
-      await mysqlApi.deleteById("user_groups", id);
+      await mysqlApi.deleteById("homebound_user_groups", id);
 
       toast.success(`User "${userIdentifier}" removed successfully!`);
       fetchUserGroups();
