@@ -195,7 +195,7 @@ export const ZapierSettings = () => {
 
   const handleTestWebhook = async (webhook: ZapierWebhook) => {
     try {
-      setLoading(true);
+      setSaving(true);
       
       // Create test payload
       const testPayload = {
@@ -236,6 +236,8 @@ export const ZapierSettings = () => {
     } catch (error: any) {
       console.error("Error testing webhook:", error);
       toast.error("Failed to test webhook. Please check the URL and try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
