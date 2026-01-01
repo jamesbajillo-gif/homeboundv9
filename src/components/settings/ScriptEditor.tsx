@@ -77,6 +77,19 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
     financial: { title: "Financial Information", content: "" }
   });
 
+  // Helper function to parse questions from script content - defined early to be available in useEffect
+  const parseQuestions = (content: string): string[] => {
+    if (!content || content.trim() === "" || content.includes("(No content")) {
+      return [];
+    }
+    
+    // Split by newlines and filter out empty lines
+    return content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith('(') && !line.startsWith('['));
+  };
+
   // Fetch script using React Query
   const { data: section, isLoading: loading } = useQuery({
     queryKey: QUERY_KEYS.scripts.byStep(stepName),
@@ -343,19 +356,6 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
       </div>
     );
   }
-
-  // Helper function to parse questions from script content
-  const parseQuestions = (content: string): string[] => {
-    if (!content || content.trim() === "" || content.includes("(No content")) {
-      return [];
-    }
-    
-    // Split by newlines and filter out empty lines
-    return content
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0 && !line.startsWith('(') && !line.startsWith('['));
-  };
 
   // Special handling for qualification step (both inbound and outbound)
   if (stepName === "outbound_qualification" || stepName === "qualification") {
