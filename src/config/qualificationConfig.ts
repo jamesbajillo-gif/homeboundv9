@@ -13,6 +13,7 @@ export interface QuestionVariant {
   id: string;
   text: string;
   isDefault?: boolean;
+  source?: 'master' | 'script'; // Where the alternative came from
 }
 
 export interface QualificationQuestion {
