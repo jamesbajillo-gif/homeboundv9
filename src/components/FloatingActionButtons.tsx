@@ -30,9 +30,10 @@ export const FloatingActionButtons = ({
   return (
     <div
       className={cn(
-        "fixed bottom-2 md:bottom-3 left-1/2 -translate-x-1/2 z-40",
+        "fixed left-1/2 -translate-x-1/2 z-40",
         "flex items-center gap-1 sm:gap-2 md:gap-3 p-1.5 sm:p-2 md:p-3 bg-card border border-border rounded-full shadow-header",
         "animate-fade-in",
+        "bottom-[calc(0.5rem+env(safe-area-inset-bottom))] md:bottom-[calc(0.75rem+env(safe-area-inset-bottom))]",
         className
       )}
     >
