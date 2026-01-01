@@ -283,30 +283,40 @@ export const QualificationScriptSelector = ({
                             </AccordionTrigger>
                             <AccordionContent>
                               <div className="space-y-2 pt-2">
-                                {enabledQuestions.map((question) => (
-                                  <label
-                                    key={question.id}
-                                    className="flex items-start gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer"
-                                  >
-                                    <Checkbox
-                                      checked={pendingSelections.has(question.id)}
-                                      onCheckedChange={() =>
-                                        handleToggleQuestion(section, question)
-                                      }
-                                      className="mt-0.5"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <span className="text-sm">{question.question}</span>
-                                      {question.zapierFieldName && (
-                                        <div className="flex items-center gap-1 mt-1">
+                                {enabledQuestions.map((question) => {
+                                  const hasAlternatives = question.alternatives && question.alternatives.length > 0;
+                                  return (
+                                    <label
+                                      key={question.id}
+                                      className="flex items-start gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer"
+                                    >
+                                      <Checkbox
+                                        checked={pendingSelections.has(question.id)}
+                                        onCheckedChange={() =>
+                                          handleToggleQuestion(section, question)
+                                        }
+                                        className="mt-0.5"
+                                      />
+                                      <div className="flex-1 min-w-0 space-y-1">
+                                        <span className="text-sm">{question.question}</span>
+                                        {hasAlternatives && (
+                                          <div className="pl-3 border-l-2 border-muted space-y-0.5">
+                                            {question.alternatives!.map((alt, idx) => (
+                                              <p key={alt.id} className="text-xs text-muted-foreground">
+                                                Alt {idx + 1}: {alt.text}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {question.zapierFieldName && (
                                           <Badge variant="outline" className="text-[10px] h-4 font-mono">
                                             {question.zapierFieldName}
                                           </Badge>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </label>
-                                ))}
+                                        )}
+                                      </div>
+                                    </label>
+                                  );
+                                })}
                                 {enabledQuestions.length === 0 && (
                                   <p className="text-sm text-muted-foreground italic py-2">
                                     No enabled questions in this section
