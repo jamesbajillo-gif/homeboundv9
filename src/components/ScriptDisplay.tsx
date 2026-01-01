@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { QualificationForm } from "@/components/QualificationForm";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -42,11 +41,12 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
 
   // Handle navigation to a section (smooth scroll)
   const handleNavigate = useCallback((sectionId: string) => {
-    const index = SECTION_ORDER.findIndex(s => s.id === sectionId);
-    if (scrollContainerRef.current && index !== -1) {
-      const sectionWidth = scrollContainerRef.current.offsetWidth;
-      scrollContainerRef.current.scrollTo({
-        left: index * sectionWidth,
+    const element = document.getElementById(sectionId);
+    if (element && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      const elementTop = element.offsetTop - container.offsetTop;
+      container.scrollTo({
+        top: elementTop,
         behavior: 'smooth'
       });
     }
@@ -58,12 +58,17 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     if (!container) return;
 
     const handleScroll = () => {
-      const sectionWidth = container.offsetWidth;
-      const scrollPosition = container.scrollLeft;
-      const index = Math.round(scrollPosition / sectionWidth);
-      const newSection = SECTION_ORDER[index]?.id;
-      if (newSection && newSection !== activeSection) {
-        setActiveSection(newSection);
+      const containerHeight = container.offsetHeight;
+      const scrollPosition = container.scrollTop + containerHeight / 3;
+      
+      for (let i = SECTION_ORDER.length - 1; i >= 0; i--) {
+        const element = document.getElementById(SECTION_ORDER[i].id);
+        if (element && element.offsetTop - container.offsetTop <= scrollPosition) {
+          if (SECTION_ORDER[i].id !== activeSection) {
+            setActiveSection(SECTION_ORDER[i].id);
+          }
+          break;
+        }
       }
     };
 
@@ -235,10 +240,10 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
           </div>
         )}
 
-        {/* Horizontal scroll container with snap */}
+        {/* Vertical scroll container with snap */}
         <div 
           ref={scrollContainerRef}
-          className="flex-1 flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-[calc(100vh-180px)] md:h-[calc(100vh-200px)]"
+          className="flex-1 overflow-y-auto snap-y snap-mandatory h-[calc(100vh-180px)] md:h-[calc(100vh-200px)] scroll-smooth"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {SECTION_ORDER.map((section, index) => {
@@ -253,53 +258,52 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
             return (
               <div 
                 key={section.id}
-                className="w-full flex-shrink-0 snap-center px-1"
+                id={section.id}
+                className="min-h-full snap-start py-2"
               >
-                <ScrollArea className="h-full">
-                  <Card 
-                    className="border-l-4 shadow-sm transition-all duration-300"
-                    style={{ borderLeftColor: `hsl(var(--${section.id === 'greeting' ? 'primary' : section.id === 'qualification' ? 'primary' : section.id === 'objectionHandling' ? 'warning' : section.id === 'closingNotInterested' ? 'destructive' : 'success'}))` }}
-                  >
-                    <CardHeader className="pb-2 md:pb-3">
-                      <div className="flex items-center gap-2 md:gap-3">
-                        <div className={`p-1.5 md:p-2 rounded-lg bg-muted ${section.color}`}>
-                          <Icon className="h-4 w-4 md:h-5 md:w-5" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[10px] md:text-xs font-medium">
-                              {index + 1} of {SECTION_ORDER.length}
-                            </Badge>
-                          </div>
-                          <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-foreground mt-1">
-                            {section.title}
-                          </CardTitle>
-                        </div>
+                <Card 
+                  className="border-l-4 shadow-sm transition-all duration-300 min-h-[calc(100vh-200px)]"
+                  style={{ borderLeftColor: `hsl(var(--${section.id === 'greeting' ? 'primary' : section.id === 'qualification' ? 'primary' : section.id === 'objectionHandling' ? 'warning' : section.id === 'closingNotInterested' ? 'destructive' : 'success'}))` }}
+                >
+                  <CardHeader className="pb-2 md:pb-3">
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className={`p-1.5 md:p-2 rounded-lg bg-muted ${section.color}`}>
+                        <Icon className="h-4 w-4 md:h-5 md:w-5" />
                       </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      {section.id === "qualification" ? (
-                        <>
-                          <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
-                            <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-                              {processedContent}
-                            </pre>
-                          </div>
-                          <Separator className="my-4 md:my-6" />
-                          <QualificationForm 
-                            onSubmitRef={onQualificationSubmitRef}
-                          />
-                        </>
-                      ) : (
-                        <div className="prose prose-sm md:prose-base max-w-none">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] md:text-xs font-medium">
+                            {index + 1} of {SECTION_ORDER.length}
+                          </Badge>
+                        </div>
+                        <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-foreground mt-1">
+                          {section.title}
+                        </CardTitle>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {section.id === "qualification" ? (
+                      <>
+                        <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
                           <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
                             {processedContent}
                           </pre>
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </ScrollArea>
+                        <Separator className="my-4 md:my-6" />
+                        <QualificationForm 
+                          onSubmitRef={onQualificationSubmitRef}
+                        />
+                      </>
+                    ) : (
+                      <div className="prose prose-sm md:prose-base max-w-none">
+                        <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
+                          {processedContent}
+                        </pre>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             );
           })}
