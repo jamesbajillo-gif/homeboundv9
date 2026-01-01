@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { RefreshCw, Pencil, Plus } from "lucide-react";
+import { RefreshCw, Pencil, Plus, Loader2 } from "lucide-react";
 import { QualificationSection as SectionType, getEnabledQuestions, QualificationQuestion } from "@/config/qualificationConfig";
 import { QuestionField } from "./QuestionField";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useScriptQuestionAlts, ScriptQuestionAlt } from "@/hooks/useScriptQuestionAlts";
 import { toast } from "sonner";
 
 interface QualificationSectionProps {
@@ -17,230 +18,209 @@ interface QualificationSectionProps {
   form: UseFormReturn<any>;
 }
 
-interface QualificationSectionProps {
-  section: SectionType;
-  form: UseFormReturn<any>;
-}
+// Storage key for current alternative selection index
+const SELECTION_STORAGE_KEY = "qualification_question_selections";
 
-// Storage key for question alternatives
-const ALTERNATIVES_STORAGE_KEY = "qualification_question_alternatives";
-
-// Get all question texts for a question (primary + alternatives) with source info
-const getAllQuestionTextsWithSource = (question: QualificationQuestion): { text: string; source: 'primary' | 'master' | 'script' }[] => {
-  const items: { text: string; source: 'primary' | 'master' | 'script' }[] = [
-    { text: question.question, source: 'primary' }
-  ];
-  if (question.alternatives && question.alternatives.length > 0) {
-    items.push(...question.alternatives.map(alt => ({
-      text: alt.text,
-      source: (alt.source || 'master') as 'master' | 'script'
-    })));
-  }
-  return items;
-};
-
-// Get all question texts for a question (primary + alternatives)
-const getAllQuestionTexts = (question: QualificationQuestion): string[] => {
-  return getAllQuestionTextsWithSource(question).map(item => item.text);
-};
-
-// Get stored alternative selections from localStorage
+// Get stored selection index per question
 const getStoredSelections = (): Record<string, number> => {
   try {
-    const stored = localStorage.getItem(ALTERNATIVES_STORAGE_KEY);
+    const stored = localStorage.getItem(SELECTION_STORAGE_KEY);
     return stored ? JSON.parse(stored) : {};
   } catch {
     return {};
   }
 };
 
-// Save alternative selections to localStorage
-const saveSelection = (questionId: string, index: number) => {
+// Save selection index
+const saveSelection = (questionId: string, index: number, scriptName: string) => {
   try {
-    const selections = getStoredSelections();
+    const key = `${SELECTION_STORAGE_KEY}_${scriptName}`;
+    const stored = localStorage.getItem(key);
+    const selections = stored ? JSON.parse(stored) : {};
     selections[questionId] = index;
-    localStorage.setItem(ALTERNATIVES_STORAGE_KEY, JSON.stringify(selections));
+    localStorage.setItem(key, JSON.stringify(selections));
   } catch (error) {
-    console.error("Error saving alternative selection:", error);
+    console.error("Error saving selection:", error);
   }
 };
 
-// Local alternatives storage key (session-specific, not saved to DB)
-const LOCAL_ALTS_STORAGE_KEY = "qualification_local_alternatives";
-
-const getStoredLocalAlternatives = (): Record<string, { id: string; text: string }[]> => {
+const getStoredScriptSelections = (scriptName: string): Record<string, number> => {
   try {
-    const stored = localStorage.getItem(LOCAL_ALTS_STORAGE_KEY);
+    const key = `${SELECTION_STORAGE_KEY}_${scriptName}`;
+    const stored = localStorage.getItem(key);
     return stored ? JSON.parse(stored) : {};
   } catch {
     return {};
-  }
-};
-
-const saveLocalAlternatives = (questionId: string, alts: { id: string; text: string }[]) => {
-  try {
-    const all = getStoredLocalAlternatives();
-    all[questionId] = alts;
-    localStorage.setItem(LOCAL_ALTS_STORAGE_KEY, JSON.stringify(all));
-  } catch (error) {
-    console.error("Error saving local alternatives:", error);
   }
 };
 
 export const QualificationSection = ({ section, form }: QualificationSectionProps) => {
   const enabledQuestions = getEnabledQuestions(section);
   
+  // Script-specific alternatives from database
+  const { 
+    alternatives: scriptAlts, 
+    isLoading: altsLoading, 
+    scriptName,
+    getAlternativesForQuestion,
+    saveAlternative,
+    addAlternative,
+    isSaving 
+  } = useScriptQuestionAlts();
+  
   // Track current selected alternative index for each question
   const [selectedAlternatives, setSelectedAlternatives] = useState<Record<string, number>>({});
-  
-  // Track locally added alternatives (session-specific)
-  const [localAlternatives, setLocalAlternatives] = useState<Record<string, { id: string; text: string }[]>>({});
   
   // Inline editing state
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
-  const [isAddingNew, setIsAddingNew] = useState(false); // true = adding new, false = editing existing
+  const [originalText, setOriginalText] = useState(""); // Track original text to detect changes
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load local alternatives on mount
+  // Load stored selections on mount and when scriptName changes
   useEffect(() => {
-    setLocalAlternatives(getStoredLocalAlternatives());
-  }, []);
-
-  // Load stored selections on mount
-  useEffect(() => {
-    const stored = getStoredSelections();
+    const stored = getStoredScriptSelections(scriptName);
     const initial: Record<string, number> = {};
     
     enabledQuestions.forEach(question => {
-      if (question.alternatives && question.alternatives.length > 0) {
-        // Use stored value if exists, otherwise use default or random based on selectionMode
-        if (stored[question.id] !== undefined) {
-          initial[question.id] = stored[question.id];
-        } else if (question.selectionMode === 'random') {
-          // Random selection from all texts (primary + alternatives)
-          const allTexts = getAllQuestionTexts(question);
-          initial[question.id] = Math.floor(Math.random() * allTexts.length);
-        } else {
-          // Use default alternative if set, otherwise use primary (index 0)
-          const defaultAltIndex = question.alternatives.findIndex(alt => alt.isDefault);
-          initial[question.id] = defaultAltIndex >= 0 ? defaultAltIndex + 1 : 0; // +1 because primary is at index 0
-        }
+      if (stored[question.id] !== undefined) {
+        initial[question.id] = stored[question.id];
+      } else if (question.selectionMode === 'random') {
+        const allTexts = getAllTextsForQuestion(question, getAlternativesForQuestion(question.id));
+        initial[question.id] = Math.floor(Math.random() * allTexts.length);
+      } else {
+        initial[question.id] = 0;
       }
     });
     
     setSelectedAlternatives(initial);
-  }, [enabledQuestions]);
+  }, [scriptName, scriptAlts]);
+
+  // Build full list of question texts (primary + master + script-specific)
+  const getAllTextsForQuestion = useCallback((
+    question: QualificationQuestion, 
+    scriptSpecificAlts: ScriptQuestionAlt[]
+  ): { text: string; source: 'primary' | 'master' | 'script'; order?: number }[] => {
+    const items: { text: string; source: 'primary' | 'master' | 'script'; order?: number }[] = [
+      { text: question.question, source: 'primary', order: 0 }
+    ];
+    
+    // Add master alternatives (from settings/forms)
+    if (question.alternatives && question.alternatives.length > 0) {
+      items.push(...question.alternatives.map((alt, idx) => ({
+        text: alt.text,
+        source: (alt.source || 'master') as 'master' | 'script',
+        order: idx + 1
+      })));
+    }
+    
+    // Add script-specific alternatives
+    scriptSpecificAlts.forEach(alt => {
+      items.push({
+        text: alt.alt_text,
+        source: 'script',
+        order: alt.alt_order
+      });
+    });
+    
+    return items;
+  }, []);
+
+  // Get displayed text for a question
+  const getDisplayedText = useCallback((question: QualificationQuestion): string => {
+    const alts = getAlternativesForQuestion(question.id);
+    const allTexts = getAllTextsForQuestion(question, alts);
+    const selectedIndex = selectedAlternatives[question.id] ?? 0;
+    return allTexts[selectedIndex]?.text || question.question;
+  }, [getAlternativesForQuestion, getAllTextsForQuestion, selectedAlternatives]);
 
   // Cycle to next alternative
   const cycleAlternative = useCallback((questionId: string, question: QualificationQuestion) => {
-    const allTexts = getAllQuestionTexts(question);
-    if (allTexts.length <= 1) return; // No alternatives to cycle
+    const alts = getAlternativesForQuestion(questionId);
+    const allTexts = getAllTextsForQuestion(question, alts);
+    if (allTexts.length <= 1) return;
 
     setSelectedAlternatives(prev => {
       const currentIndex = prev[questionId] ?? 0;
       const nextIndex = (currentIndex + 1) % allTexts.length;
-      
-      // Save to localStorage
-      saveSelection(questionId, nextIndex);
-      
+      saveSelection(questionId, nextIndex, scriptName);
       return { ...prev, [questionId]: nextIndex };
     });
-  }, []);
+  }, [getAlternativesForQuestion, getAllTextsForQuestion, scriptName]);
 
-  // Get all texts including local alternatives
-  const getFullQuestionTextsWithSource = useCallback((question: QualificationQuestion): { text: string; source: 'primary' | 'master' | 'script' | 'local' }[] => {
-    const items: { text: string; source: 'primary' | 'master' | 'script' | 'local' }[] = [
-      { text: question.question, source: 'primary' }
-    ];
-    if (question.alternatives && question.alternatives.length > 0) {
-      items.push(...question.alternatives.map(alt => ({
-        text: alt.text,
-        source: (alt.source || 'master') as 'master' | 'script'
-      })));
-    }
-    // Add local alternatives
-    const localAlts = localAlternatives[question.id] || [];
-    items.push(...localAlts.map(alt => ({
-      text: alt.text,
-      source: 'local' as const
-    })));
-    return items;
-  }, [localAlternatives]);
-
-  // Get the current question text to display
-  const getDisplayedQuestionText = useCallback((question: QualificationQuestion): string => {
-    const allTexts = getFullQuestionTextsWithSource(question);
-    if (allTexts.length <= 1) {
-      return question.question;
-    }
-    const selectedIndex = selectedAlternatives[question.id] ?? 0;
-    return allTexts[selectedIndex]?.text || question.question;
-  }, [getFullQuestionTextsWithSource, selectedAlternatives]);
-
-  // Handle starting inline edit of current displayed text
+  // Start inline edit
   const handleStartEdit = (questionId: string, currentText: string) => {
     setEditingQuestionId(questionId);
     setEditingText(currentText);
+    setOriginalText(currentText);
     setIsAddingNew(false);
   };
 
-  // Handle starting inline add new alternative
+  // Start adding new
   const handleStartAdd = (questionId: string) => {
     setEditingQuestionId(questionId);
     setEditingText("");
+    setOriginalText("");
     setIsAddingNew(true);
   };
 
-  // Handle canceling inline edit
+  // Cancel edit
   const handleCancelEdit = () => {
     setEditingQuestionId(null);
     setEditingText("");
+    setOriginalText("");
     setIsAddingNew(false);
   };
 
-  // Handle confirming inline edit (saves as new local alternative)
-  const handleConfirmEdit = (questionId: string) => {
-    if (!editingText.trim()) {
+  // Auto-save on blur
+  const handleBlurSave = async (questionId: string) => {
+    const trimmedText = editingText.trim();
+    
+    // If empty or unchanged, just cancel
+    if (!trimmedText || (!isAddingNew && trimmedText === originalText)) {
       handleCancelEdit();
       return;
     }
 
-    const currentAlts = localAlternatives[questionId] || [];
-    const newAlt = {
-      id: `local_${Date.now()}`,
-      text: editingText.trim()
-    };
-    const updated = [...currentAlts, newAlt];
-    
-    setLocalAlternatives(prev => ({
-      ...prev,
-      [questionId]: updated
-    }));
-    saveLocalAlternatives(questionId, updated);
-    
-    // Auto-select the newly added alternative
-    const question = enabledQuestions.find(q => q.id === questionId);
-    if (question) {
-      const allTexts = getFullQuestionTextsWithSource(question);
-      const newIndex = allTexts.length; // Will be at the end after adding
-      setSelectedAlternatives(prev => ({ ...prev, [questionId]: newIndex }));
-      saveSelection(questionId, newIndex);
+    try {
+      if (isAddingNew) {
+        // Add new alternative
+        await addAlternative(questionId, trimmedText);
+        toast.success("Alternative saved");
+      } else {
+        // Editing existing - save as new script alternative
+        await addAlternative(questionId, trimmedText);
+        toast.success("Saved as script alternative");
+      }
+      
+      // Auto-select the newly added (will be last in list after refetch)
+      const question = enabledQuestions.find(q => q.id === questionId);
+      if (question) {
+        const currentAlts = getAlternativesForQuestion(questionId);
+        const allTexts = getAllTextsForQuestion(question, currentAlts);
+        const newIndex = allTexts.length; // New one will be at the end
+        setSelectedAlternatives(prev => ({ ...prev, [questionId]: newIndex }));
+        saveSelection(questionId, newIndex, scriptName);
+      }
+    } catch (error) {
+      console.error("Error saving alternative:", error);
+      toast.error("Failed to save");
     }
     
-    toast.success(isAddingNew ? "Alternative added" : "Saved as new alternative");
     handleCancelEdit();
   };
 
-  // Handle removing local alternative
-  const handleRemoveLocalAlt = (questionId: string, altId: string) => {
-    const currentAlts = localAlternatives[questionId] || [];
-    const updated = currentAlts.filter(a => a.id !== altId);
-    
-    setLocalAlternatives(prev => ({
-      ...prev,
-      [questionId]: updated
-    }));
-    saveLocalAlternatives(questionId, updated);
+  const getSourceLabel = (source: 'primary' | 'master' | 'script') => {
+    if (source === 'primary') return 'Default';
+    if (source === 'master') return 'Forms';
+    return 'Script';
+  };
+
+  const getSourceBgClass = (source: 'primary' | 'master' | 'script') => {
+    if (source === 'primary') return 'bg-primary/20';
+    if (source === 'master') return 'bg-muted';
+    return 'bg-green-500/20';
   };
 
   return (
@@ -253,37 +233,28 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
         )}
       </div>
 
-      {/* Questions with Inline Fields */}
+      {/* Questions */}
       <div className="space-y-6 pt-2">
         {enabledQuestions.map((question, questionIndex) => {
-          const fullTextsWithSource = getFullQuestionTextsWithSource(question);
-          const hasAnyAlternatives = fullTextsWithSource.length > 1;
+          const questionAlts = getAlternativesForQuestion(question.id);
+          const allTexts = getAllTextsForQuestion(question, questionAlts);
+          const hasAlternatives = allTexts.length > 1;
           const currentIndex = selectedAlternatives[question.id] ?? 0;
-          const currentSource = fullTextsWithSource[currentIndex]?.source || 'primary';
-          const questionLocalAlts = localAlternatives[question.id] || [];
-
-          const getSourceLabel = (source: 'primary' | 'master' | 'script' | 'local') => {
-            if (source === 'primary') return 'Primary';
-            if (source === 'master') return 'Forms';
-            if (source === 'local') return 'Session';
-            return 'Script';
-          };
-
+          const currentSource = allTexts[currentIndex]?.source || 'primary';
           const isEditing = editingQuestionId === question.id;
-          const displayedText = getDisplayedQuestionText(question);
+          const displayedText = getDisplayedText(question);
 
           return (
             <div key={question.id} className="space-y-3">
-              {/* Question */}
               <div className="flex items-start gap-3">
                 <span className="text-base font-medium text-foreground min-w-[2rem] pt-0.5">
                   {questionIndex + 1}.
                 </span>
                 
                 {isEditing ? (
-                  /* Inline editing - directly in place */
                   <div className="flex-1 flex items-center gap-2">
                     <input
+                      ref={inputRef}
                       type="text"
                       value={editingText}
                       onChange={(e) => setEditingText(e.target.value)}
@@ -293,38 +264,25 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          handleConfirmEdit(question.id);
+                          handleBlurSave(question.id);
                         } else if (e.key === "Escape") {
                           handleCancelEdit();
                         }
                       }}
-                      onBlur={() => {
-                        // Small delay to allow button clicks
-                        setTimeout(() => {
-                          if (editingQuestionId === question.id) {
-                            handleCancelEdit();
-                          }
-                        }, 150);
-                      }}
+                      onBlur={() => handleBlurSave(question.id)}
                     />
-                    {question.isRequired && (
-                      <span className="text-destructive">*</span>
-                    )}
+                    {isSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    {question.isRequired && <span className="text-destructive">*</span>}
                   </div>
                 ) : (
-                  /* Display mode */
                   <>
                     <p className="text-base font-medium text-foreground flex-1 leading-relaxed">
                       {displayedText}
-                      {question.isRequired && (
-                        <span className="text-destructive ml-1">*</span>
-                      )}
+                      {question.isRequired && <span className="text-destructive ml-1">*</span>}
                     </p>
                     
-                    {/* Action buttons */}
                     <div className="flex items-center gap-0.5 shrink-0">
-                      {/* Cycle button */}
-                      {hasAnyAlternatives && (
+                      {hasAlternatives && (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -341,21 +299,17 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                             <TooltipContent side="left" className="max-w-xs">
                               <div className="text-xs space-y-1.5">
                                 <p className="font-medium">
-                                  Showing {currentIndex + 1} of {fullTextsWithSource.length} • {getSourceLabel(currentSource)}
+                                  {currentIndex + 1} of {allTexts.length} • {getSourceLabel(currentSource)}
                                 </p>
                                 <div className="border-t pt-1.5 space-y-1">
-                                  {fullTextsWithSource.map((item, idx) => (
+                                  {allTexts.map((item, idx) => (
                                     <div 
                                       key={idx} 
                                       className={`flex items-start gap-1.5 ${idx === currentIndex ? 'text-primary font-medium' : 'text-muted-foreground'}`}
                                     >
                                       <span className="shrink-0">{idx + 1}.</span>
                                       <span className="flex-1 line-clamp-2">{item.text}</span>
-                                      <span className={`shrink-0 text-[10px] px-1 rounded ${
-                                        item.source === 'primary' ? 'bg-primary/20' : 
-                                        item.source === 'script' ? 'bg-green-500/20' :
-                                        item.source === 'local' ? 'bg-blue-500/20' : 'bg-muted'
-                                      }`}>
+                                      <span className={`shrink-0 text-[10px] px-1 rounded ${getSourceBgClass(item.source)}`}>
                                         {getSourceLabel(item.source)}
                                       </span>
                                     </div>
@@ -368,7 +322,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                         </TooltipProvider>
                       )}
 
-                      {/* Edit button - edits current displayed text */}
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -382,11 +335,10 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                               <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Edit displayed question</TooltipContent>
+                          <TooltipContent>Edit (saves to script)</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
 
-                      {/* Add button - adds new alternative */}
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -400,7 +352,7 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                               <Plus className="h-4 w-4 text-muted-foreground" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Add new alternative</TooltipContent>
+                          <TooltipContent>Add alternative</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     </div>
@@ -408,7 +360,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                 )}
               </div>
 
-              {/* Input Field based on question's inline config */}
               <div className="ml-11">
                 <QuestionField question={question} form={form} />
               </div>
