@@ -182,143 +182,68 @@ const SortableQuestion = ({
       className={`border rounded-lg ${!question.enabled ? 'opacity-60 bg-muted/50' : 'bg-card'} ${isDragging ? 'shadow-lg ring-2 ring-primary' : ''}`}
     >
       {isEditing ? (
-        <div className="p-4 space-y-4">
-          {/* Primary Question Text */}
-          <div className="space-y-2">
-            <Label>Primary Question</Label>
-            <Textarea
+        <div className="p-3 space-y-3">
+          {/* Question Text - Compact */}
+          <div className="flex gap-2">
+            <Input
               value={question.question}
               onChange={(e) => onUpdate({ question: e.target.value })}
-              rows={2}
+              placeholder="Question text..."
+              className="flex-1"
+            />
+            <Button size="sm" variant="outline" onClick={onCancelEdit}>
+              Done
+            </Button>
+          </div>
+
+          {/* Compact settings row */}
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <Select
+              value={question.inputType || "text"}
+              onValueChange={(value) => onUpdate({ inputType: value as FieldType })}
+            >
+              <SelectTrigger className="w-[110px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FIELD_TYPES.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Switch
+                checked={question.isRequired || false}
+                onCheckedChange={(isRequired) => onUpdate({ isRequired })}
+                className="scale-90"
+              />
+              <span className="text-xs">Required</span>
+            </label>
+
+            <Input
+              value={question.zapierFieldName || ""}
+              onChange={(e) => onUpdate({ zapierFieldName: e.target.value || undefined })}
+              placeholder="Zapier field..."
+              className="w-[120px] h-8 text-xs"
+            />
+
+            <Input
+              value={question.placeholder || ""}
+              onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
+              placeholder="Placeholder..."
+              className="w-[120px] h-8 text-xs"
             />
           </div>
 
-          {/* Alternative Questions */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-2">
-                <Copy className="h-4 w-4" />
-                Alternative Questions
-              </Label>
-              {hasAlternatives && (
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground">Selection:</Label>
-                  <Select
-                    value={question.selectionMode || "default"}
-                    onValueChange={(value) => onUpdate({ selectionMode: value as 'default' | 'random' })}
-                  >
-                    <SelectTrigger className="w-[120px] h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Use Default</SelectItem>
-                      <SelectItem value="random">Random</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            
-            <p className="text-xs text-muted-foreground">
-              Add alternative phrasings for this question. They can be randomly selected or you can set a default.
-            </p>
-
-            {/* List of alternatives */}
-            <div className="space-y-2">
-              {(question.alternatives || []).map((alt, idx) => (
-                <div key={alt.id} className="flex items-start gap-2 p-2 bg-muted/30 rounded">
-                  <span className="text-xs text-muted-foreground mt-2.5 w-6">#{idx + 1}</span>
-                  <Textarea
-                    value={alt.text}
-                    onChange={(e) => handleUpdateAlternative(alt.id, e.target.value)}
-                    className="flex-1 min-h-[60px]"
-                    rows={2}
-                  />
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      variant={alt.isDefault ? "default" : "outline"}
-                      size="sm"
-                      className="text-xs h-7"
-                      onClick={() => handleSetDefaultAlternative(alt.isDefault ? null : alt.id)}
-                      title={alt.isDefault ? "Remove as default" : "Set as default"}
-                    >
-                      {alt.isDefault ? "Default" : "Set Default"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveAlternative(alt.id)}
-                      className="text-destructive h-7 w-7"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Add new alternative */}
-            <div className="flex items-start gap-2">
-              <Textarea
-                value={newAlternative}
-                onChange={(e) => setNewAlternative(e.target.value)}
-                placeholder="Add alternative question phrasing..."
-                className="flex-1"
-                rows={2}
-              />
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleAddAlternative}
-                disabled={!newAlternative.trim()}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add
-              </Button>
-            </div>
-          </div>
-
-          {/* Input Type & Required */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Input Type</Label>
-              <Select
-                value={question.inputType || "text"}
-                onValueChange={(value) => onUpdate({ inputType: value as FieldType })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FIELD_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Required</Label>
-              <div className="flex items-center h-10">
-                <Switch
-                  checked={question.isRequired || false}
-                  onCheckedChange={(isRequired) => onUpdate({ isRequired })}
-                />
-                <span className="ml-2 text-sm text-muted-foreground">
-                  {question.isRequired ? "Required" : "Optional"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Options for Select type */}
+          {/* Options for Select type - Compact */}
           {question.inputType === "select" && (
-            <div className="space-y-2">
-              <Label>Options</Label>
-              <div className="space-y-2">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 {(question.fieldOptions || []).map((option, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  <div key={idx} className="flex items-center gap-1 bg-muted/50 rounded px-2 py-1">
                     <Input
                       value={option.label}
                       onChange={(e) => {
@@ -326,137 +251,146 @@ const SortableQuestion = ({
                         options[idx] = { ...option, label: e.target.value };
                         onUpdate({ fieldOptions: options });
                       }}
-                      className="flex-1"
+                      className="h-6 w-[100px] text-xs px-1"
                     />
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => handleRemoveOption(idx)}
-                      className="text-destructive"
+                      className="h-5 w-5 text-destructive"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
                 ))}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <Input
                     value={newOption}
                     onChange={(e) => setNewOption(e.target.value)}
-                    placeholder="Add new option..."
+                    placeholder="+ option"
+                    className="h-6 w-[80px] text-xs"
                     onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddOption())}
                   />
-                  <Button variant="outline" size="sm" onClick={handleAddOption}>
-                    Add
+                  <Button variant="ghost" size="icon" onClick={handleAddOption} className="h-6 w-6">
+                    <Plus className="h-3 w-3" />
                   </Button>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                2-4 options display as radio buttons, 5+ as a dropdown
-              </p>
             </div>
           )}
 
-          {/* Placeholder & Help Text */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Placeholder</Label>
-              <Input
-                value={question.placeholder || ""}
-                onChange={(e) => onUpdate({ placeholder: e.target.value || undefined })}
-                placeholder="e.g., Enter value..."
-              />
+          {/* Alternatives - Collapsible compact */}
+          {(hasAlternatives || newAlternative) && (
+            <div className="space-y-1.5 pt-1 border-t">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Copy className="h-3 w-3" /> Alternatives
+                </span>
+                {hasAlternatives && (
+                  <Select
+                    value={question.selectionMode || "default"}
+                    onValueChange={(value) => onUpdate({ selectionMode: value as 'default' | 'random' })}
+                  >
+                    <SelectTrigger className="w-[90px] h-6 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default</SelectItem>
+                      <SelectItem value="random">Random</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="space-y-1">
+                {(question.alternatives || []).map((alt) => (
+                  <div key={alt.id} className="flex items-center gap-1.5">
+                    <Input
+                      value={alt.text}
+                      onChange={(e) => handleUpdateAlternative(alt.id, e.target.value)}
+                      className="flex-1 h-7 text-xs"
+                    />
+                    <Button
+                      variant={alt.isDefault ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-6 text-xs px-2"
+                      onClick={() => handleSetDefaultAlternative(alt.isDefault ? null : alt.id)}
+                    >
+                      {alt.isDefault ? "✓" : "Set"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveAlternative(alt.id)}
+                      className="h-6 w-6 text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Help Text</Label>
-              <Input
-                value={question.helpText || ""}
-                onChange={(e) => onUpdate({ helpText: e.target.value || undefined })}
-                placeholder="Additional guidance..."
-              />
-            </div>
-          </div>
+          )}
 
-          {/* Zapier Field Name */}
-          <div className="space-y-2">
-            <Label>Zapier Field Name</Label>
+          {/* Add alternative - always visible when editing */}
+          <div className="flex items-center gap-1.5">
             <Input
-              value={question.zapierFieldName || ""}
-              onChange={(e) => onUpdate({ zapierFieldName: e.target.value || undefined })}
-              placeholder="e.g., property_value"
+              value={newAlternative}
+              onChange={(e) => setNewAlternative(e.target.value)}
+              placeholder="+ Add alternative phrasing..."
+              className="flex-1 h-7 text-xs"
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddAlternative())}
             />
-            <p className="text-xs text-muted-foreground">
-              This field name will be used in the Zapier webhook payload
-            </p>
-          </div>
-
-          <div className="flex justify-end">
-            <Button size="sm" onClick={onCancelEdit}>
-              Done
-            </Button>
+            {newAlternative && (
+              <Button variant="ghost" size="icon" onClick={handleAddAlternative} className="h-6 w-6">
+                <Plus className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         </div>
       ) : (
-        <div className="p-4">
-          <div className="flex items-start gap-3">
+        <div className="p-3">
+          <div className="flex items-center gap-2">
             <button
-              className="mt-1 cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-muted rounded"
+              className="cursor-grab active:cursor-grabbing touch-none p-0.5 hover:bg-muted rounded"
               {...attributes}
               {...listeners}
             >
               <GripVertical className="h-4 w-4 text-muted-foreground" />
             </button>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">
-                {index + 1}. {question.question}
-              </p>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Badge variant="outline" className="text-xs">
-                  {getFieldTypeLabel(question.inputType)}
+            <span className="text-xs text-muted-foreground w-5">{index + 1}.</span>
+            <p className="flex-1 text-sm truncate">{question.question}</p>
+            <div className="flex items-center gap-1.5">
+              <Badge variant="outline" className="text-[10px] h-5">
+                {getFieldTypeLabel(question.inputType)}
+              </Badge>
+              {question.isRequired && (
+                <Badge variant="secondary" className="text-[10px] h-5">Req</Badge>
+              )}
+              {hasAlternatives && (
+                <Badge variant="outline" className="text-[10px] h-5">
+                  <Shuffle className="h-2.5 w-2.5 mr-0.5" />
+                  {question.alternatives!.length}
                 </Badge>
-                {question.isRequired && (
-                  <Badge variant="secondary" className="text-xs">
-                    Required
-                  </Badge>
-                )}
-                {question.zapierFieldName && (
-                  <Badge variant="outline" className="text-xs text-muted-foreground">
-                    Zapier: {question.zapierFieldName}
-                  </Badge>
-                )}
-                {question.inputType === "select" && question.fieldOptions && (
-                  <Badge variant="outline" className="text-xs">
-                    {question.fieldOptions.length} options
-                  </Badge>
-                )}
-                {hasAlternatives && (
-                  <Badge variant="outline" className="text-xs flex items-center gap-1">
-                    <Shuffle className="h-3 w-3" />
-                    {question.alternatives!.length} alternative{question.alternatives!.length > 1 ? 's' : ''}
-                    {question.selectionMode === 'random' && ' (random)'}
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
+              )}
               <Switch
                 checked={question.enabled}
                 onCheckedChange={(enabled) => onUpdate({ enabled })}
+                className="scale-75"
               />
-              <Button variant="ghost" size="sm" onClick={onEdit}>
-                <Pencil className="h-3 w-3 mr-1" />
-                Edit
+              <Button variant="ghost" size="icon" onClick={onEdit} className="h-7 w-7">
+                <Pencil className="h-3 w-3" />
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                    <Trash2 className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive">
+                    <Trash2 className="h-3 w-3" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete Question?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will permanently remove this question from the questionnaire.
+                      This will permanently remove this question.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
