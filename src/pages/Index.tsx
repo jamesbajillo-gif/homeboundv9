@@ -26,7 +26,7 @@ const Index = () => {
     <div className="min-h-screen bg-background overflow-hidden h-screen">
       <FloatingCallHeader />
       <div className="pt-12 md:pt-14 px-2 sm:px-4 md:px-6 lg:px-8">
-        <div className="max-w-full mx-auto">
+        <div className="max-w-5xl mx-auto">
           <VICILeadDisplay />
         </div>
       </div>
