@@ -1,9 +1,10 @@
 -- ============================================
 -- MySQL Database Schema for Dynamic Script App
 -- Create these tables in your MySQL database
+-- All tables use the homebound_ prefix for consistency
 -- ============================================
 
--- 1. Scripts Table (homebound_script)
+-- 1. Scripts Table
 CREATE TABLE IF NOT EXISTS homebound_script (
     id INT AUTO_INCREMENT PRIMARY KEY,
     step_name VARCHAR(100) NOT NULL UNIQUE,
@@ -15,7 +16,7 @@ CREATE TABLE IF NOT EXISTS homebound_script (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. Qualification Form Fields Table
-CREATE TABLE IF NOT EXISTS qualification_form_fields (
+CREATE TABLE IF NOT EXISTS homebound_qualification_form_fields (
     id INT AUTO_INCREMENT PRIMARY KEY,
     field_name VARCHAR(100) NOT NULL UNIQUE,
     field_label VARCHAR(255) NOT NULL,
@@ -34,7 +35,7 @@ CREATE TABLE IF NOT EXISTS qualification_form_fields (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. Zapier Settings Table
-CREATE TABLE IF NOT EXISTS zapier_settings (
+CREATE TABLE IF NOT EXISTS homebound_zapier_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     webhook_url VARCHAR(500) NOT NULL UNIQUE,
     webhook_name VARCHAR(255) DEFAULT NULL,
@@ -45,10 +46,37 @@ CREATE TABLE IF NOT EXISTS zapier_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 4. User Groups Table
-CREATE TABLE IF NOT EXISTS user_groups (
+CREATE TABLE IF NOT EXISTS homebound_user_groups (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_identifier VARCHAR(100) NOT NULL UNIQUE,
     group_type ENUM('inbound', 'outbound') NOT NULL DEFAULT 'inbound',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5. List ID Configuration Table
+CREATE TABLE IF NOT EXISTS homebound_list_id_config (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    list_id VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    step_name VARCHAR(255) DEFAULT NULL,
+    title TEXT DEFAULT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    properties JSON DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_list_step (list_id, step_name),
+    KEY idx_list_id (list_id),
+    KEY idx_step_name (step_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6. App Settings Table (for localStorage migration)
+CREATE TABLE IF NOT EXISTS homebound_app_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(255) NOT NULL UNIQUE,
+    setting_value TEXT,
+    setting_type VARCHAR(50) DEFAULT 'string',
+    description TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
