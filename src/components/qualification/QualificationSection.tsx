@@ -1,15 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { RefreshCw, Pencil, Plus, Loader2 } from "lucide-react";
+import { RefreshCw, Pencil, Plus, Loader2, List, Trash2, Star } from "lucide-react";
 import { QualificationSection as SectionType, getEnabledQuestions, QualificationQuestion } from "@/config/qualificationConfig";
 import { QuestionField } from "./QuestionField";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useScriptQuestionAlts, ScriptQuestionAlt } from "@/hooks/useScriptQuestionAlts";
 import { toast } from "sonner";
 
@@ -21,17 +27,6 @@ interface QualificationSectionProps {
 // Storage key for current alternative selection index
 const SELECTION_STORAGE_KEY = "qualification_question_selections";
 
-// Get stored selection index per question
-const getStoredSelections = (): Record<string, number> => {
-  try {
-    const stored = localStorage.getItem(SELECTION_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
-};
-
-// Save selection index
 const saveSelection = (questionId: string, index: number, scriptName: string) => {
   try {
     const key = `${SELECTION_STORAGE_KEY}_${scriptName}`;
@@ -57,28 +52,28 @@ const getStoredScriptSelections = (scriptName: string): Record<string, number> =
 export const QualificationSection = ({ section, form }: QualificationSectionProps) => {
   const enabledQuestions = getEnabledQuestions(section);
   
-  // Script-specific alternatives from database
   const { 
     alternatives: scriptAlts, 
     isLoading: altsLoading, 
     scriptName,
     getAlternativesForQuestion,
-    saveAlternative,
     addAlternative,
-    isSaving 
+    deleteAlternativeById,
+    setDefaultAlternative,
+    clearDefault,
+    isSaving,
+    isDeleting 
   } = useScriptQuestionAlts();
   
-  // Track current selected alternative index for each question
   const [selectedAlternatives, setSelectedAlternatives] = useState<Record<string, number>>({});
-  
-  // Inline editing state
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
-  const [originalText, setOriginalText] = useState(""); // Track original text to detect changes
+  const [originalText, setOriginalText] = useState("");
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [listOpenFor, setListOpenFor] = useState<string | null>(null);
+  const [newAltText, setNewAltText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load stored selections on mount and when scriptName changes
   useEffect(() => {
     const stored = getStoredScriptSelections(scriptName);
     const initial: Record<string, number> = {};
@@ -97,37 +92,36 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     setSelectedAlternatives(initial);
   }, [scriptName, scriptAlts]);
 
-  // Build full list of question texts (primary + master + script-specific)
   const getAllTextsForQuestion = useCallback((
     question: QualificationQuestion, 
     scriptSpecificAlts: ScriptQuestionAlt[]
-  ): { text: string; source: 'primary' | 'master' | 'script'; order?: number }[] => {
-    const items: { text: string; source: 'primary' | 'master' | 'script'; order?: number }[] = [
+  ): { text: string; source: 'primary' | 'master' | 'script'; order?: number; id?: number; isDefault?: boolean }[] => {
+    const items: { text: string; source: 'primary' | 'master' | 'script'; order?: number; id?: number; isDefault?: boolean }[] = [
       { text: question.question, source: 'primary', order: 0 }
     ];
     
-    // Add master alternatives (from settings/forms)
     if (question.alternatives && question.alternatives.length > 0) {
       items.push(...question.alternatives.map((alt, idx) => ({
         text: alt.text,
         source: (alt.source || 'master') as 'master' | 'script',
-        order: idx + 1
+        order: idx + 1,
+        isDefault: alt.isDefault
       })));
     }
     
-    // Add script-specific alternatives
     scriptSpecificAlts.forEach(alt => {
       items.push({
         text: alt.alt_text,
         source: 'script',
-        order: alt.alt_order
+        order: alt.alt_order,
+        id: alt.id,
+        isDefault: alt.is_default === 1
       });
     });
     
     return items;
   }, []);
 
-  // Get displayed text for a question
   const getDisplayedText = useCallback((question: QualificationQuestion): string => {
     const alts = getAlternativesForQuestion(question.id);
     const allTexts = getAllTextsForQuestion(question, alts);
@@ -135,7 +129,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     return allTexts[selectedIndex]?.text || question.question;
   }, [getAlternativesForQuestion, getAllTextsForQuestion, selectedAlternatives]);
 
-  // Cycle to next alternative
   const cycleAlternative = useCallback((questionId: string, question: QualificationQuestion) => {
     const alts = getAlternativesForQuestion(questionId);
     const allTexts = getAllTextsForQuestion(question, alts);
@@ -149,7 +142,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     });
   }, [getAlternativesForQuestion, getAllTextsForQuestion, scriptName]);
 
-  // Start inline edit
   const handleStartEdit = (questionId: string, currentText: string) => {
     setEditingQuestionId(questionId);
     setEditingText(currentText);
@@ -157,7 +149,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     setIsAddingNew(false);
   };
 
-  // Start adding new
   const handleStartAdd = (questionId: string) => {
     setEditingQuestionId(questionId);
     setEditingText("");
@@ -165,7 +156,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     setIsAddingNew(true);
   };
 
-  // Cancel edit
   const handleCancelEdit = () => {
     setEditingQuestionId(null);
     setEditingText("");
@@ -173,33 +163,23 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     setIsAddingNew(false);
   };
 
-  // Auto-save on blur
   const handleBlurSave = async (questionId: string) => {
     const trimmedText = editingText.trim();
     
-    // If empty or unchanged, just cancel
     if (!trimmedText || (!isAddingNew && trimmedText === originalText)) {
       handleCancelEdit();
       return;
     }
 
     try {
-      if (isAddingNew) {
-        // Add new alternative
-        await addAlternative(questionId, trimmedText);
-        toast.success("Alternative saved");
-      } else {
-        // Editing existing - save as new script alternative
-        await addAlternative(questionId, trimmedText);
-        toast.success("Saved as script alternative");
-      }
+      await addAlternative(questionId, trimmedText);
+      toast.success(isAddingNew ? "Alternative added" : "Saved as script alternative");
       
-      // Auto-select the newly added (will be last in list after refetch)
       const question = enabledQuestions.find(q => q.id === questionId);
       if (question) {
         const currentAlts = getAlternativesForQuestion(questionId);
         const allTexts = getAllTextsForQuestion(question, currentAlts);
-        const newIndex = allTexts.length; // New one will be at the end
+        const newIndex = allTexts.length;
         setSelectedAlternatives(prev => ({ ...prev, [questionId]: newIndex }));
         saveSelection(questionId, newIndex, scriptName);
       }
@@ -209,6 +189,47 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     }
     
     handleCancelEdit();
+  };
+
+  const handleAddFromList = async (questionId: string) => {
+    if (!newAltText.trim()) return;
+    
+    try {
+      await addAlternative(questionId, newAltText.trim());
+      toast.success("Alternative added");
+      setNewAltText("");
+    } catch (error) {
+      toast.error("Failed to add");
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteAlternativeById(id);
+      toast.success("Alternative removed");
+    } catch (error) {
+      toast.error("Failed to remove");
+    }
+  };
+
+  const handleSetDefault = async (questionId: string, altOrder: number, currentlyDefault: boolean) => {
+    try {
+      if (currentlyDefault) {
+        await clearDefault(questionId);
+        toast.success("Default cleared");
+      } else {
+        await setDefaultAlternative(questionId, altOrder);
+        toast.success("Set as default");
+      }
+    } catch (error) {
+      toast.error("Failed to update");
+    }
+  };
+
+  const handleSelectFromList = (questionId: string, index: number) => {
+    setSelectedAlternatives(prev => ({ ...prev, [questionId]: index }));
+    saveSelection(questionId, index, scriptName);
+    setListOpenFor(null);
   };
 
   const getSourceLabel = (source: 'primary' | 'master' | 'script') => {
@@ -225,7 +246,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
 
   return (
     <div className="space-y-6">
-      {/* Section Header */}
       <div className="border-b border-border pb-4">
         <h3 className="text-xl font-semibold text-foreground">{section.title}</h3>
         {section.description && (
@@ -233,7 +253,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
         )}
       </div>
 
-      {/* Questions */}
       <div className="space-y-6 pt-2">
         {enabledQuestions.map((question, questionIndex) => {
           const questionAlts = getAlternativesForQuestion(question.id);
@@ -296,31 +315,105 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                                 <RefreshCw className="h-4 w-4 text-muted-foreground" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent side="left" className="max-w-xs">
-                              <div className="text-xs space-y-1.5">
-                                <p className="font-medium">
-                                  {currentIndex + 1} of {allTexts.length} • {getSourceLabel(currentSource)}
-                                </p>
-                                <div className="border-t pt-1.5 space-y-1">
-                                  {allTexts.map((item, idx) => (
-                                    <div 
-                                      key={idx} 
-                                      className={`flex items-start gap-1.5 ${idx === currentIndex ? 'text-primary font-medium' : 'text-muted-foreground'}`}
-                                    >
-                                      <span className="shrink-0">{idx + 1}.</span>
-                                      <span className="flex-1 line-clamp-2">{item.text}</span>
-                                      <span className={`shrink-0 text-[10px] px-1 rounded ${getSourceBgClass(item.source)}`}>
-                                        {getSourceLabel(item.source)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                                <p className="text-muted-foreground pt-1">Click to cycle</p>
-                              </div>
-                            </TooltipContent>
+                            <TooltipContent>Cycle alternatives</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       )}
+
+                      {/* List button with popover */}
+                      <Popover open={listOpenFor === question.id} onOpenChange={(open) => setListOpenFor(open ? question.id : null)}>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                >
+                                  <List className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              </PopoverTrigger>
+                            </TooltipTrigger>
+                            <TooltipContent>Manage alternatives</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <PopoverContent className="w-96 p-0" align="end">
+                          <div className="p-3 border-b">
+                            <h4 className="font-medium text-sm">Question Alternatives</h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">Click to select, star to set default</p>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto">
+                            {allTexts.map((item, idx) => (
+                              <div 
+                                key={idx}
+                                className={`flex items-start gap-2 p-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0 ${idx === currentIndex ? 'bg-primary/10' : ''}`}
+                                onClick={() => handleSelectFromList(question.id, idx)}
+                              >
+                                <span className="text-xs text-muted-foreground min-w-[1.5rem] pt-0.5">{idx + 1}.</span>
+                                <span className="flex-1 text-sm">{item.text}</span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${getSourceBgClass(item.source)}`}>
+                                    {getSourceLabel(item.source)}
+                                  </span>
+                                  {item.source === 'script' && item.id && (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSetDefault(question.id, item.order!, item.isDefault || false);
+                                        }}
+                                      >
+                                        <Star className={`h-3.5 w-3.5 ${item.isDefault ? 'fill-yellow-500 text-yellow-500' : 'text-muted-foreground'}`} />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-destructive hover:text-destructive"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDelete(item.id!);
+                                        }}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="p-2 border-t flex gap-2">
+                            <Input
+                              value={newAltText}
+                              onChange={(e) => setNewAltText(e.target.value)}
+                              placeholder="Add new alternative..."
+                              className="text-sm h-8"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleAddFromList(question.id);
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8"
+                              onClick={() => handleAddFromList(question.id)}
+                              disabled={!newAltText.trim() || isSaving}
+                            >
+                              {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
 
                       <TooltipProvider>
                         <Tooltip>
@@ -335,7 +428,7 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                               <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Edit (saves to script)</TooltipContent>
+                          <TooltipContent>Edit inline</TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
 
