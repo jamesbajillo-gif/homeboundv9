@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { RefreshCw, Pencil, Plus, X } from "lucide-react";
+import { RefreshCw, Pencil, Plus } from "lucide-react";
 import { QualificationSection as SectionType, getEnabledQuestions, QualificationQuestion } from "@/config/qualificationConfig";
 import { QuestionField } from "./QuestionField";
 import { Button } from "@/components/ui/button";
@@ -11,14 +11,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { toast } from "sonner";
+
+interface QualificationSectionProps {
+  section: SectionType;
+  form: UseFormReturn<any>;
+}
 
 interface QualificationSectionProps {
   section: SectionType;
@@ -99,10 +97,10 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
   // Track locally added alternatives (session-specific)
   const [localAlternatives, setLocalAlternatives] = useState<Record<string, { id: string; text: string }[]>>({});
   
-  // Edit dialog state
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // Inline editing state
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
-  const [newAltText, setNewAltText] = useState("");
+  const [editingText, setEditingText] = useState("");
+  const [isAddingNew, setIsAddingNew] = useState(false); // true = adding new, false = editing existing
 
   // Load local alternatives on mount
   useEffect(() => {
@@ -180,31 +178,58 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
     return allTexts[selectedIndex]?.text || question.question;
   }, [getFullQuestionTextsWithSource, selectedAlternatives]);
 
-  // Handle opening edit dialog
-  const handleOpenEdit = (questionId: string) => {
+  // Handle starting inline edit of current displayed text
+  const handleStartEdit = (questionId: string, currentText: string) => {
     setEditingQuestionId(questionId);
-    setNewAltText("");
-    setEditDialogOpen(true);
+    setEditingText(currentText);
+    setIsAddingNew(false);
   };
 
-  // Handle adding local alternative
-  const handleAddLocalAlt = () => {
-    if (!newAltText.trim() || !editingQuestionId) return;
-    
-    const currentAlts = localAlternatives[editingQuestionId] || [];
+  // Handle starting inline add new alternative
+  const handleStartAdd = (questionId: string) => {
+    setEditingQuestionId(questionId);
+    setEditingText("");
+    setIsAddingNew(true);
+  };
+
+  // Handle canceling inline edit
+  const handleCancelEdit = () => {
+    setEditingQuestionId(null);
+    setEditingText("");
+    setIsAddingNew(false);
+  };
+
+  // Handle confirming inline edit (saves as new local alternative)
+  const handleConfirmEdit = (questionId: string) => {
+    if (!editingText.trim()) {
+      handleCancelEdit();
+      return;
+    }
+
+    const currentAlts = localAlternatives[questionId] || [];
     const newAlt = {
       id: `local_${Date.now()}`,
-      text: newAltText.trim()
+      text: editingText.trim()
     };
     const updated = [...currentAlts, newAlt];
     
     setLocalAlternatives(prev => ({
       ...prev,
-      [editingQuestionId]: updated
+      [questionId]: updated
     }));
-    saveLocalAlternatives(editingQuestionId, updated);
-    setNewAltText("");
-    toast.success("Alternative added");
+    saveLocalAlternatives(questionId, updated);
+    
+    // Auto-select the newly added alternative
+    const question = enabledQuestions.find(q => q.id === questionId);
+    if (question) {
+      const allTexts = getFullQuestionTextsWithSource(question);
+      const newIndex = allTexts.length; // Will be at the end after adding
+      setSelectedAlternatives(prev => ({ ...prev, [questionId]: newIndex }));
+      saveSelection(questionId, newIndex);
+    }
+    
+    toast.success(isAddingNew ? "Alternative added" : "Saved as new alternative");
+    handleCancelEdit();
   };
 
   // Handle removing local alternative
@@ -245,6 +270,9 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
             return 'Script';
           };
 
+          const isEditing = editingQuestionId === question.id;
+          const displayedText = getDisplayedQuestionText(question);
+
           return (
             <div key={question.id} className="space-y-3">
               {/* Question */}
@@ -252,98 +280,144 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
                 <span className="text-base font-medium text-foreground min-w-[2rem] pt-0.5">
                   {questionIndex + 1}.
                 </span>
-                <p className="text-base font-medium text-foreground flex-1 leading-relaxed">
-                  {getDisplayedQuestionText(question)}
-                  {question.isRequired && (
-                    <span className="text-destructive ml-1">*</span>
-                  )}
-                </p>
                 
-                {/* Action buttons */}
-                <div className="flex items-center gap-0.5 shrink-0">
-                  {/* Cycle button */}
-                  {hasAnyAlternatives && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => cycleAlternative(question.id, question)}
-                          >
-                            <RefreshCw className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-xs">
-                          <div className="text-xs space-y-1.5">
-                            <p className="font-medium">
-                              Showing {currentIndex + 1} of {fullTextsWithSource.length} • {getSourceLabel(currentSource)}
-                            </p>
-                            <div className="border-t pt-1.5 space-y-1">
-                              {fullTextsWithSource.map((item, idx) => (
-                                <div 
-                                  key={idx} 
-                                  className={`flex items-start gap-1.5 ${idx === currentIndex ? 'text-primary font-medium' : 'text-muted-foreground'}`}
-                                >
-                                  <span className="shrink-0">{idx + 1}.</span>
-                                  <span className="flex-1 line-clamp-2">{item.text}</span>
-                                  <span className={`shrink-0 text-[10px] px-1 rounded ${
-                                    item.source === 'primary' ? 'bg-primary/20' : 
-                                    item.source === 'script' ? 'bg-green-500/20' :
-                                    item.source === 'local' ? 'bg-blue-500/20' : 'bg-muted'
-                                  }`}>
-                                    {getSourceLabel(item.source)}
-                                  </span>
+                {isEditing ? (
+                  /* Inline editing mode */
+                  <div className="flex-1 space-y-2">
+                    <Input
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      placeholder={isAddingNew ? "Type new alternative..." : "Edit question text..."}
+                      className="text-base"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleConfirmEdit(question.id);
+                        } else if (e.key === "Escape") {
+                          handleCancelEdit();
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleConfirmEdit(question.id)}
+                        disabled={!editingText.trim()}
+                      >
+                        {isAddingNew ? "Add" : "Save as Alternative"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCancelEdit}
+                      >
+                        Cancel
+                      </Button>
+                      {!isAddingNew && (
+                        <span className="text-xs text-muted-foreground">
+                          Editing will create a new session alternative
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Display mode */
+                  <>
+                    <p className="text-base font-medium text-foreground flex-1 leading-relaxed">
+                      {displayedText}
+                      {question.isRequired && (
+                        <span className="text-destructive ml-1">*</span>
+                      )}
+                    </p>
+                    
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      {/* Cycle button */}
+                      {hasAnyAlternatives && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => cycleAlternative(question.id, question)}
+                              >
+                                <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="max-w-xs">
+                              <div className="text-xs space-y-1.5">
+                                <p className="font-medium">
+                                  Showing {currentIndex + 1} of {fullTextsWithSource.length} • {getSourceLabel(currentSource)}
+                                </p>
+                                <div className="border-t pt-1.5 space-y-1">
+                                  {fullTextsWithSource.map((item, idx) => (
+                                    <div 
+                                      key={idx} 
+                                      className={`flex items-start gap-1.5 ${idx === currentIndex ? 'text-primary font-medium' : 'text-muted-foreground'}`}
+                                    >
+                                      <span className="shrink-0">{idx + 1}.</span>
+                                      <span className="flex-1 line-clamp-2">{item.text}</span>
+                                      <span className={`shrink-0 text-[10px] px-1 rounded ${
+                                        item.source === 'primary' ? 'bg-primary/20' : 
+                                        item.source === 'script' ? 'bg-green-500/20' :
+                                        item.source === 'local' ? 'bg-blue-500/20' : 'bg-muted'
+                                      }`}>
+                                        {getSourceLabel(item.source)}
+                                      </span>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                            <p className="text-muted-foreground pt-1">Click to cycle</p>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
+                                <p className="text-muted-foreground pt-1">Click to cycle</p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
 
-                  {/* Edit button */}
-                  {hasAnyAlternatives && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => handleOpenEdit(question.id)}
-                          >
-                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Edit alternatives</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
+                      {/* Edit button - edits current displayed text */}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleStartEdit(question.id, displayedText)}
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit displayed question</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
 
-                  {/* Add button */}
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => handleOpenEdit(question.id)}
-                        >
-                          <Plus className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Add alternative</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                      {/* Add button - adds new alternative */}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleStartAdd(question.id)}
+                            >
+                              <Plus className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Add new alternative</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Input Field based on question's inline config */}
@@ -360,97 +434,6 @@ export const QualificationSection = ({ section, form }: QualificationSectionProp
           </p>
         )}
       </div>
-
-      {/* Edit Alternatives Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manage Alternatives</DialogTitle>
-          </DialogHeader>
-          {editingQuestionId && (
-            <div className="space-y-4">
-              {/* Show the question */}
-              <div className="p-3 bg-muted/50 rounded text-sm">
-                {enabledQuestions.find(q => q.id === editingQuestionId)?.question}
-              </div>
-
-              {/* Existing alternatives from config (read-only) */}
-              {(() => {
-                const question = enabledQuestions.find(q => q.id === editingQuestionId);
-                if (question?.alternatives && question.alternatives.length > 0) {
-                  return (
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium text-muted-foreground">From Config:</p>
-                      {question.alternatives.map((alt, idx) => (
-                        <div key={alt.id} className="flex items-center gap-2 text-xs text-muted-foreground pl-2 border-l-2">
-                          <span>{idx + 1}. {alt.text}</span>
-                          <span className={`text-[10px] px-1 rounded ${
-                            alt.source === 'script' ? 'bg-green-500/20' : 'bg-muted'
-                          }`}>
-                            {alt.source === 'script' ? 'Script' : 'Forms'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* Session-local alternatives (editable) */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium">Session Alternatives:</p>
-                {(localAlternatives[editingQuestionId] || []).length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No session alternatives added</p>
-                ) : (
-                  <div className="space-y-1">
-                    {(localAlternatives[editingQuestionId] || []).map((alt, idx) => (
-                      <div key={alt.id} className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
-                        <span className="flex-1 text-sm">{alt.text}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-destructive"
-                          onClick={() => handleRemoveLocalAlt(editingQuestionId, alt.id)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add new */}
-                <div className="flex gap-2 pt-2">
-                  <Input
-                    value={newAltText}
-                    onChange={(e) => setNewAltText(e.target.value)}
-                    placeholder="Add alternative phrasing..."
-                    className="flex-1 h-8 text-sm"
-                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddLocalAlt())}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddLocalAlt}
-                    disabled={!newAltText.trim()}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Session alternatives are stored locally and will persist until browser data is cleared.
-                </p>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button onClick={() => setEditDialogOpen(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
