@@ -21,6 +21,7 @@ import {
 interface ObjectionListEditorProps {
   stepName: string;
   stepTitle: string;
+  listId?: string; // Optional: If provided, uses list ID config table instead
 }
 
 interface ScriptSection {
@@ -28,6 +29,8 @@ interface ScriptSection {
   step_name: string;
   title: string;
   content: string;
+  list_id?: string;
+  name?: string;
 }
 
 interface ListItem {
@@ -49,7 +52,7 @@ interface ObjectionAlternative {
 
 const ALTS_TABLE = "homebound_objection_alts";
 
-export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditorProps) => {
+export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionListEditorProps) => {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<ListItem[]>([]);
@@ -59,29 +62,44 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const [newText, setNewText] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ListItem | null>(null);
 
+  // Determine which table and query key to use
+  const tableName = listId ? "homebound_list_id_config" : "homebound_script";
+  const queryKey = listId 
+    ? ["list-script", listId, stepName] 
+    : QUERY_KEYS.scripts.byStep(stepName);
+  const altsScriptName = listId ? `listid_${listId}_${stepName}` : stepName;
+
   // Fetch script using React Query
   const { data: section, isLoading } = useQuery({
-    queryKey: QUERY_KEYS.scripts.byStep(stepName),
+    queryKey,
     queryFn: async () => {
-      const data = await mysqlApi.findOneByField<ScriptSection>(
-        "homebound_script",
-        "step_name",
-        stepName
-      );
-      return data;
+      if (listId) {
+        const data = await mysqlApi.findOneByFields<ScriptSection>(
+          tableName,
+          { list_id: listId, step_name: stepName }
+        );
+        return data;
+      } else {
+        const data = await mysqlApi.findOneByField<ScriptSection>(
+          tableName,
+          "step_name",
+          stepName
+        );
+        return data;
+      }
     },
     enabled: !!stepName,
   });
 
   // Fetch alternatives
   const { data: alternatives = [], isLoading: altsLoading } = useQuery({
-    queryKey: [QUERY_KEYS.scripts.all, "objection_alts", stepName],
+    queryKey: [QUERY_KEYS.scripts.all, "objection_alts", altsScriptName],
     queryFn: async (): Promise<ObjectionAlternative[]> => {
       try {
         const data = await mysqlApi.findByField<ObjectionAlternative>(
           ALTS_TABLE,
           "script_name",
-          stepName,
+          altsScriptName,
           { orderBy: "alt_order", order: "ASC" }
         );
         return data;
@@ -104,7 +122,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", stepName] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", altsScriptName] });
     },
   });
 
@@ -112,13 +130,13 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const deleteAltMutation = useMutation({
     mutationFn: async ({ objectionId, altOrder }: { objectionId: string; altOrder: number }) => {
       await mysqlApi.deleteByWhere(ALTS_TABLE, {
-        script_name: stepName,
+        script_name: altsScriptName,
         objection_id: objectionId,
         alt_order: altOrder,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", stepName] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", altsScriptName] });
     },
   });
 
@@ -159,19 +177,34 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Extract the base objection (first item that's type 'objection')
       const objectionItem = items.find(i => i.type === 'objection');
       const content = objectionItem?.text || '';
       
-      // Use upsert for reliable save - handles both insert and update
-      await mysqlApi.upsertByFields("homebound_script", {
-        step_name: stepName,
-        title: stepTitle,
-        content,
-        button_config: JSON.stringify([]),
-      });
+      if (listId) {
+        // Save to list ID config table
+        const existingConfig = await mysqlApi.findOneByFields<{ name: string }>(
+          "homebound_list_id_config",
+          { list_id: listId }
+        );
+        
+        await mysqlApi.upsertByFields("homebound_list_id_config", {
+          list_id: listId,
+          step_name: stepName,
+          title: stepTitle,
+          content,
+          name: existingConfig?.name || listId,
+        }, "list_id,step_name");
+      } else {
+        // Save to default script table
+        await mysqlApi.upsertByFields("homebound_script", {
+          step_name: stepName,
+          title: stepTitle,
+          content,
+          button_config: JSON.stringify([]),
+        });
+      }
 
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.byStep(stepName) });
+      queryClient.invalidateQueries({ queryKey });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.all });
       queryClient.invalidateQueries({ queryKey: ['scripts', 'display'] });
       toast.success("Saved!");
@@ -195,7 +228,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
 
     if (item.type === 'alternative' && item.objectionId && item.altOrder !== undefined) {
       await saveAltMutation.mutateAsync({
-        script_name: stepName,
+        script_name: altsScriptName,
         objection_id: item.objectionId,
         alt_text: editText.trim(),
         alt_order: item.altOrder,
@@ -240,7 +273,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       const nextOrder = existingAlts.length > 0 ? Math.max(...existingAlts.map(a => a.alt_order)) + 1 : 1;
       
       await saveAltMutation.mutateAsync({
-        script_name: stepName,
+        script_name: altsScriptName,
         objection_id: baseObjection.objectionId!,
         alt_text: newText.trim(),
         alt_order: nextOrder,

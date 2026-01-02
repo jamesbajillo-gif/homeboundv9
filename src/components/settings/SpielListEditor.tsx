@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, Loader2, Check, X, Pencil } from "lucide-react";
 import { mysqlApi } from "@/lib/mysqlApi";
@@ -22,6 +21,7 @@ import {
 interface SpielListEditorProps {
   stepName: string;
   stepTitle: string;
+  listId?: string; // Optional: If provided, uses list ID config table instead
 }
 
 interface ScriptSection {
@@ -29,6 +29,8 @@ interface ScriptSection {
   step_name: string;
   title: string;
   content: string;
+  list_id?: string;
+  name?: string;
 }
 
 interface ListItem {
@@ -50,7 +52,7 @@ interface SpielAlternative {
 
 const ALTS_TABLE = "homebound_spiel_alts";
 
-export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) => {
+export const SpielListEditor = ({ stepName, stepTitle, listId }: SpielListEditorProps) => {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<ListItem[]>([]);
@@ -60,29 +62,46 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
   const [newText, setNewText] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ListItem | null>(null);
 
+  // Determine which table and query key to use
+  const tableName = listId ? "homebound_list_id_config" : "homebound_script";
+  const queryKey = listId 
+    ? ["list-script", listId, stepName] 
+    : QUERY_KEYS.scripts.byStep(stepName);
+  const altsScriptName = listId ? `listid_${listId}_${stepName}` : stepName;
+
   // Fetch script using React Query
   const { data: section, isLoading } = useQuery({
-    queryKey: QUERY_KEYS.scripts.byStep(stepName),
+    queryKey,
     queryFn: async () => {
-      const data = await mysqlApi.findOneByField<ScriptSection>(
-        "homebound_script",
-        "step_name",
-        stepName
-      );
-      return data;
+      if (listId) {
+        // List ID specific script
+        const data = await mysqlApi.findOneByFields<ScriptSection>(
+          tableName,
+          { list_id: listId, step_name: stepName }
+        );
+        return data;
+      } else {
+        // Default script
+        const data = await mysqlApi.findOneByField<ScriptSection>(
+          tableName,
+          "step_name",
+          stepName
+        );
+        return data;
+      }
     },
     enabled: !!stepName,
   });
 
   // Fetch alternatives
   const { data: alternatives = [], isLoading: altsLoading } = useQuery({
-    queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", stepName],
+    queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", altsScriptName],
     queryFn: async (): Promise<SpielAlternative[]> => {
       try {
         const data = await mysqlApi.findByField<SpielAlternative>(
           ALTS_TABLE,
           "script_name",
-          stepName,
+          altsScriptName,
           { orderBy: "alt_order", order: "ASC" }
         );
         return data;
@@ -105,7 +124,7 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", stepName] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", altsScriptName] });
     },
   });
 
@@ -113,13 +132,13 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
   const deleteAltMutation = useMutation({
     mutationFn: async ({ spielId, altOrder }: { spielId: string; altOrder: number }) => {
       await mysqlApi.deleteByWhere(ALTS_TABLE, {
-        script_name: stepName,
+        script_name: altsScriptName,
         spiel_id: spielId,
         alt_order: altOrder,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", stepName] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", altsScriptName] });
     },
   });
 
@@ -127,7 +146,6 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
   const parseToItems = (content: string, alts: SpielAlternative[]): ListItem[] => {
     const result: ListItem[] = [];
     
-    // The base spiel is the original content
     if (content && content.trim()) {
       result.push({
         id: 'spiel_0',
@@ -137,7 +155,6 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
       });
     }
 
-    // Add alternatives to the list
     alts.forEach((alt) => {
       result.push({
         id: `alt_${alt.spiel_id}_${alt.alt_order}`,
@@ -160,19 +177,34 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Extract the base spiel (first item that's type 'spiel')
       const spielItem = items.find(i => i.type === 'spiel');
       const content = spielItem?.text || '';
       
-      // Use upsert for reliable save - handles both insert and update
-      await mysqlApi.upsertByFields("homebound_script", {
-        step_name: stepName,
-        title: stepTitle,
-        content,
-        button_config: JSON.stringify([]),
-      });
+      if (listId) {
+        // Save to list ID config table
+        const existingConfig = await mysqlApi.findOneByFields<{ name: string }>(
+          "homebound_list_id_config",
+          { list_id: listId }
+        );
+        
+        await mysqlApi.upsertByFields("homebound_list_id_config", {
+          list_id: listId,
+          step_name: stepName,
+          title: stepTitle,
+          content,
+          name: existingConfig?.name || listId,
+        }, "list_id,step_name");
+      } else {
+        // Save to default script table
+        await mysqlApi.upsertByFields("homebound_script", {
+          step_name: stepName,
+          title: stepTitle,
+          content,
+          button_config: JSON.stringify([]),
+        });
+      }
 
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.byStep(stepName) });
+      queryClient.invalidateQueries({ queryKey });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.all });
       queryClient.invalidateQueries({ queryKey: ['scripts', 'display'] });
       toast.success("Saved!");
@@ -196,7 +228,7 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
 
     if (item.type === 'alternative' && item.spielId && item.altOrder !== undefined) {
       await saveAltMutation.mutateAsync({
-        script_name: stepName,
+        script_name: altsScriptName,
         spiel_id: item.spielId,
         alt_text: editText.trim(),
         alt_order: item.altOrder,
@@ -232,23 +264,20 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
   const handleAdd = async () => {
     if (!newText.trim()) return;
     
-    // Find the base spiel to add alternative to
     const baseSpiel = items.find(i => i.type === 'spiel');
     
     if (baseSpiel) {
-      // Add as alternative to base spiel
       const existingAlts = alternatives.filter(a => a.spiel_id === baseSpiel.spielId);
       const nextOrder = existingAlts.length > 0 ? Math.max(...existingAlts.map(a => a.alt_order)) + 1 : 1;
       
       await saveAltMutation.mutateAsync({
-        script_name: stepName,
+        script_name: altsScriptName,
         spiel_id: baseSpiel.spielId!,
         alt_text: newText.trim(),
         alt_order: nextOrder,
         is_default: 0,
       });
     } else {
-      // No base spiel exists, create it
       setItems(prev => [...prev, {
         id: 'spiel_0',
         text: newText.trim(),
@@ -290,7 +319,6 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
         </div>
       </div>
 
-      {/* Add new item form */}
       {isAdding && (
         <div className="flex gap-2 mb-3">
           <Textarea
@@ -311,7 +339,6 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
         </div>
       )}
 
-      {/* Simple numbered list */}
       <div className="space-y-2">
         {items.length === 0 && !isAdding && (
           <p className="text-sm text-muted-foreground text-center py-4">
@@ -379,7 +406,6 @@ export const SpielListEditor = ({ stepName, stepTitle }: SpielListEditorProps) =
         ))}
       </div>
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
