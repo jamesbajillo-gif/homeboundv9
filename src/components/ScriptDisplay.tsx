@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QualificationForm } from "@/components/QualificationForm";
 import { ObjectionDisplay } from "@/components/ObjectionDisplay";
+import { SpielDisplay } from "@/components/SpielDisplay";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle } from "lucide-react";
@@ -318,6 +319,24 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
                       </>
                     ) : section.id === "objectionHandling" ? (
                       <ObjectionDisplay content={sectionData.content} />
+                    ) : section.id === "greeting" ? (
+                      <SpielDisplay 
+                        content={sectionData.content} 
+                        stepName="greeting"
+                        accentColor="border-blue-500" 
+                      />
+                    ) : section.id === "closingNotInterested" ? (
+                      <SpielDisplay 
+                        content={sectionData.content} 
+                        stepName="closingNotInterested"
+                        accentColor="border-red-500" 
+                      />
+                    ) : section.id === "closingSuccess" ? (
+                      <SpielDisplay 
+                        content={sectionData.content} 
+                        stepName="closingSuccess"
+                        accentColor="border-green-500" 
+                      />
                     ) : (
                       <div className="prose prose-sm md:prose-base max-w-none">
                         <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">

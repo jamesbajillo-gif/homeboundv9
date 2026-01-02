@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { ScriptEditor } from "@/components/settings/ScriptEditor";
+import { SpielListEditor } from "@/components/settings/SpielListEditor";
 import { QualificationScriptSelector } from "@/components/settings/QualificationScriptSelector";
 import { ObjectionListEditor } from "@/components/settings/ObjectionListEditor";
 
@@ -38,7 +38,7 @@ const OutboundScripts = () => {
               </TabsList>
 
               <TabsContent value="greeting" className="mt-6">
-                <ScriptEditor stepName="outbound_greeting" stepTitle="Opening Greeting" />
+                <SpielListEditor stepName="outbound_greeting" stepTitle="Opening Greeting" />
               </TabsContent>
 
               <TabsContent value="qualification" className="mt-6">
@@ -53,11 +53,11 @@ const OutboundScripts = () => {
               </TabsContent>
 
               <TabsContent value="closingNotInterested" className="mt-6">
-                <ScriptEditor stepName="outbound_closingNotInterested" stepTitle="Closing - Not Interested" />
+                <SpielListEditor stepName="outbound_closingNotInterested" stepTitle="Closing - Not Interested" />
               </TabsContent>
 
               <TabsContent value="closingSuccess" className="mt-6">
-                <ScriptEditor stepName="outbound_closingSuccess" stepTitle="Closing - Successful" />
+                <SpielListEditor stepName="outbound_closingSuccess" stepTitle="Closing - Success" />
               </TabsContent>
             </Tabs>
           </div>
