@@ -16,13 +16,8 @@ import {
 
 interface ObjectionDisplayProps {
   content: string;
-}
-
-interface ParsedObjection {
-  id: string;
-  title: string;
-  response: string;
-  lineIndex: number;
+  stepName: string;
+  accentColor?: string;
 }
 
 interface UnifiedItem {
@@ -32,7 +27,7 @@ interface UnifiedItem {
   altOrder?: number;
 }
 
-export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
+export const ObjectionDisplay = ({ content, stepName, accentColor = "border-amber-500" }: ObjectionDisplayProps) => {
   const { leadData } = useVICI();
   const { 
     alternatives, 
@@ -40,7 +35,7 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
     saveAlternative, 
     addAlternative,
     isSaving,
-  } = useObjectionAlternatives();
+  } = useObjectionAlternatives(stepName);
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
@@ -49,93 +44,35 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
   const [newAltText, setNewAltText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Parse objections from content
-  const parseObjections = useCallback((rawContent: string): ParsedObjection[] => {
-    const lines = rawContent.split('\n');
-    const objections: ParsedObjection[] = [];
-    let currentObjection: Partial<ParsedObjection> | null = null;
-    let responseLines: string[] = [];
-
-    lines.forEach((line, index) => {
-      const trimmed = line.trim();
-      
-      const boldMatch = trimmed.match(/^\*\*(.+?)\*\*$/);
-      const numberedMatch = trimmed.match(/^(\d+[\.\)]\s*)(.+)$/);
-      
-      if (boldMatch || (numberedMatch && trimmed.length < 100)) {
-        if (currentObjection?.title) {
-          objections.push({
-            id: `objection_${objections.length}`,
-            title: currentObjection.title,
-            response: responseLines.join('\n').trim(),
-            lineIndex: currentObjection.lineIndex || 0,
-          });
-        }
-        
-        currentObjection = {
-          title: boldMatch ? boldMatch[1] : (numberedMatch ? numberedMatch[2] : trimmed),
-          lineIndex: index,
-        };
-        responseLines = [];
-      } else if (currentObjection && trimmed) {
-        responseLines.push(trimmed);
-      }
-    });
-
-    if (currentObjection?.title) {
-      objections.push({
-        id: `objection_${objections.length}`,
-        title: currentObjection.title,
-        response: responseLines.join('\n').trim(),
-        lineIndex: currentObjection.lineIndex || 0,
-      });
-    }
-
-    if (objections.length === 0 && rawContent.trim()) {
-      const paragraphs = rawContent.split(/\n\n+/).filter(p => p.trim());
-      paragraphs.forEach((para, idx) => {
-        const firstLine = para.split('\n')[0].trim();
-        const rest = para.split('\n').slice(1).join('\n').trim();
-        objections.push({
-          id: `objection_${idx}`,
-          title: firstLine.substring(0, 50) + (firstLine.length > 50 ? '...' : ''),
-          response: rest || firstLine,
-          lineIndex: idx,
-        });
-      });
-    }
-
-    return objections;
-  }, []);
-
-  const objections = parseObjections(content);
-
-  // Build unified list: all objections + their alternatives in one flat array
+  // Build unified list: base objection + alternatives
+  // Alternatives can exist even if base content is empty/deleted
   const unifiedList = useMemo((): UnifiedItem[] => {
     const items: UnifiedItem[] = [];
     
-    objections.forEach((objection) => {
-      // Add original
+    // Get alternatives first to check if we have any
+    const alts = getAlternativesForObjection('objection_0');
+    
+    // Add original content as first item (only if it exists)
+    if (content && content.trim()) {
       items.push({
-        objectionId: objection.id,
-        text: objection.response,
+        objectionId: 'objection_0',
+        text: content.trim(),
         isOriginal: true,
       });
-      
-      // Add alternatives for this objection
-      const alts = getAlternativesForObjection(objection.id);
-      alts.forEach((alt) => {
-        items.push({
-          objectionId: objection.id,
-          text: alt.alt_text,
-          isOriginal: false,
-          altOrder: alt.alt_order,
-        });
+    }
+    
+    // Add alternatives for the base objection
+    alts.forEach((alt) => {
+      items.push({
+        objectionId: 'objection_0',
+        text: alt.alt_text,
+        isOriginal: false,
+        altOrder: alt.alt_order,
       });
     });
     
     return items;
-  }, [objections, getAlternativesForObjection, alternatives]);
+  }, [content, getAlternativesForObjection, alternatives]);
 
   // Safe current index
   const safeIndex = unifiedList.length > 0 ? currentIndex % unifiedList.length : 0;
@@ -180,19 +117,19 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
 
   // Add new alternative
   const handleAddAlternative = useCallback(async () => {
-    if (!newAltText.trim() || !currentItem) {
+    if (!newAltText.trim()) {
       setIsAdding(false);
       return;
     }
 
-    await addAlternative(currentItem.objectionId, newAltText.trim());
+    await addAlternative('objection_0', newAltText.trim());
     setIsAdding(false);
     setNewAltText("");
     toast.success("Alternative added");
-  }, [newAltText, currentItem, addAlternative]);
+  }, [newAltText, addAlternative]);
 
-  // Empty state: no objections parsed and no alternatives
-  if (objections.length === 0 && unifiedList.length === 0) {
+  // Empty state: no base content and no alternatives
+  if (unifiedList.length === 0) {
     return (
       <div className="prose prose-sm md:prose-base max-w-none">
         <p className="text-muted-foreground italic">No objection handling content configured. Add content in Settings.</p>
@@ -265,8 +202,8 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
           </div>
         </div>
 
-        {/* Content with amber left border */}
-        <div className="border-l-2 border-amber-500 pl-4">
+        {/* Content with colored left border */}
+        <div className={`border-l-2 ${accentColor} pl-4`}>
           {isEditing ? (
             <div className="flex gap-2">
               <Input

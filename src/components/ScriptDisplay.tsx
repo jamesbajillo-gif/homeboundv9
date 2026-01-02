@@ -318,7 +318,11 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
                         />
                       </>
                     ) : section.id === "objectionHandling" ? (
-                      <ObjectionDisplay content={sectionData.content} />
+                      <ObjectionDisplay 
+                        content={sectionData.content} 
+                        stepName="objection"
+                        accentColor="border-amber-500" 
+                      />
                     ) : section.id === "greeting" ? (
                       <SpielDisplay 
                         content={sectionData.content} 
