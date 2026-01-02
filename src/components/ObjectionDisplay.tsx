@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Plus, Check, X, Pencil } from "lucide-react";
+import { RefreshCw, Plus, Check, X, Pencil, MessageSquare } from "lucide-react";
 import { useObjectionAlternatives } from "@/hooks/useObjectionAlternatives";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
@@ -205,29 +205,34 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
 
   return (
     <TooltipProvider>
-      <div className="border-l-4 border-amber-500 bg-card rounded-r-lg">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-3">
-            <Badge variant="secondary" className="text-xs font-medium">
+      <div className="space-y-2">
+        {/* Header row with icon, badge, title, and actions */}
+        <div className="flex items-start gap-3">
+          {/* Icon with badge */}
+          <div className="relative flex-shrink-0">
+            <MessageSquare className="h-5 w-5 text-amber-500" />
+            <Badge 
+              variant="outline" 
+              className="absolute -top-3 -right-6 text-[10px] px-1.5 py-0 h-4 font-normal border-border bg-background"
+            >
               {safeIndex + 1} of {unifiedList.length}
             </Badge>
-            <span className="font-semibold text-foreground">Objection Handling</span>
           </div>
           
-          {/* Action buttons */}
-          <div className="flex items-center gap-1">
+          {/* Title and actions */}
+          <div className="flex items-center gap-2 pt-0.5">
+            <span className="font-semibold text-foreground">Objection Handling</span>
+            
+            {/* Action icons - inline with title */}
             {unifiedList.length > 1 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8"
+                  <button
+                    className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
                     onClick={handleCycle}
                   >
                     <RefreshCw className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Next ({safeIndex + 1}/{unifiedList.length})</p>
@@ -237,14 +242,12 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
             
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
+                <button
+                  className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
                   onClick={handleStartEdit}
                 >
                   <Pencil className="h-4 w-4" />
-                </Button>
+                </button>
               </TooltipTrigger>
               <TooltipContent>
                 <p>{currentItem?.isOriginal ? 'Create alternative' : 'Edit'}</p>
@@ -253,17 +256,15 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
             
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
+                <button
+                  className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => {
                     setIsAdding(true);
                     setNewAltText("");
                   }}
                 >
                   <Plus className="h-4 w-4" />
-                </Button>
+                </button>
               </TooltipTrigger>
               <TooltipContent>
                 <p>Add alternative</p>
@@ -272,8 +273,8 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-4">
+        {/* Content with amber left border */}
+        <div className="border-l-2 border-amber-500 pl-4 ml-2">
           {isEditing ? (
             <div className="flex gap-2">
               <Input
@@ -333,9 +334,9 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
               </Button>
             </div>
           ) : (
-            <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed text-foreground">
+            <p className="text-foreground text-sm sm:text-base leading-relaxed">
               {displayText}
-            </pre>
+            </p>
           )}
         </div>
       </div>
