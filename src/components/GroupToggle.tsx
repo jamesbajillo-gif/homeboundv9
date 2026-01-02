@@ -17,7 +17,10 @@ export const GroupToggle = () => {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center gap-2">
+          <div 
+            className="flex items-center gap-2"
+            onClick={(e) => e.stopPropagation()}
+          >
             <span className={cn(
               "text-xs sm:text-sm font-semibold transition-colors",
               !isOutbound ? "text-primary" : "text-muted-foreground"
