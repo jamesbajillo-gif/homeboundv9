@@ -90,20 +90,15 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
     }
 
     // Fallback: If no structured objections found but content exists,
-    // treat paragraphs as individual objections (legacy format support)
+    // treat entire content as a single objection (legacy format support)
     if (parsed.length === 0 && content.trim()) {
-      const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
-      
-      paragraphs.forEach((paragraph, index) => {
-        const trimmed = paragraph.trim();
-        parsed.push({
-          id: `obj_${index}`,
-          title: `Objection ${index + 1}`,
-          response: trimmed
-        });
+      parsed.push({
+        id: `obj_0`,
+        title: `Objection 1`,
+        response: content.trim()
       });
       
-      if (showLegacyToast && parsed.length > 0) {
+      if (showLegacyToast) {
         toast.info("Legacy format detected. Review and click 'Save All' to update.");
       }
     }
