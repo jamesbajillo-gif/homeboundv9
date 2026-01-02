@@ -298,6 +298,8 @@ export const REQUIRED_TABLES = [
   'homebound_zapier_settings',
   'homebound_app_settings',
   'homebound_script_question_alts',
+  'homebound_spiel_alts',
+  'homebound_objection_alts',
 ];
 
 /**
@@ -318,6 +320,10 @@ export function getTableSQL(tableName: string): string | null {
     'homebound_app_settings': `CREATE TABLE IF NOT EXISTS \`homebound_app_settings\` (\`id\` int(11) NOT NULL AUTO_INCREMENT, \`setting_key\` varchar(255) NOT NULL, \`setting_value\` text NOT NULL, \`setting_type\` enum('string','boolean','number','json') NOT NULL DEFAULT 'string', \`description\` text DEFAULT NULL, \`created_at\` datetime DEFAULT CURRENT_TIMESTAMP, \`updated_at\` datetime DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (\`id\`), UNIQUE KEY \`setting_key\` (\`setting_key\`), KEY \`idx_setting_type\` (\`setting_type\`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
 
     'homebound_script_question_alts': `CREATE TABLE IF NOT EXISTS \`homebound_script_question_alts\` (\`id\` int(11) NOT NULL AUTO_INCREMENT, \`script_name\` varchar(50) NOT NULL, \`question_id\` varchar(100) NOT NULL, \`alt_text\` text NOT NULL, \`alt_order\` int(11) NOT NULL DEFAULT 0, \`is_default\` tinyint(1) NOT NULL DEFAULT 0, \`created_at\` datetime DEFAULT CURRENT_TIMESTAMP, \`updated_at\` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (\`id\`), UNIQUE KEY \`unique_script_question_order\` (\`script_name\`, \`question_id\`, \`alt_order\`), KEY \`idx_script_name\` (\`script_name\`), KEY \`idx_question_id\` (\`question_id\`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    'homebound_spiel_alts': `CREATE TABLE IF NOT EXISTS \`homebound_spiel_alts\` (\`id\` int(11) NOT NULL AUTO_INCREMENT, \`script_name\` varchar(100) NOT NULL, \`spiel_id\` varchar(100) NOT NULL, \`alt_text\` text NOT NULL, \`alt_order\` int(11) NOT NULL DEFAULT 0, \`is_default\` tinyint(1) NOT NULL DEFAULT 0, \`created_at\` datetime DEFAULT CURRENT_TIMESTAMP, \`updated_at\` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (\`id\`), UNIQUE KEY \`unique_script_spiel_order\` (\`script_name\`, \`spiel_id\`, \`alt_order\`), KEY \`idx_script_name\` (\`script_name\`), KEY \`idx_spiel_id\` (\`spiel_id\`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    'homebound_objection_alts': `CREATE TABLE IF NOT EXISTS \`homebound_objection_alts\` (\`id\` int(11) NOT NULL AUTO_INCREMENT, \`script_name\` varchar(100) NOT NULL, \`objection_id\` varchar(100) NOT NULL, \`alt_text\` text NOT NULL, \`alt_order\` int(11) NOT NULL DEFAULT 0, \`is_default\` tinyint(1) NOT NULL DEFAULT 0, \`created_at\` datetime DEFAULT CURRENT_TIMESTAMP, \`updated_at\` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (\`id\`), UNIQUE KEY \`unique_script_objection_order\` (\`script_name\`, \`objection_id\`, \`alt_order\`), KEY \`idx_script_name\` (\`script_name\`), KEY \`idx_objection_id\` (\`objection_id\`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
   };
 
   return tableDefinitions[tableName] || null;
