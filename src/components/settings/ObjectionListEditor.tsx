@@ -130,8 +130,11 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
         });
       }
 
+      // Invalidate all relevant caches
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.byStep(stepName) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.all });
+      // Also invalidate the display cache that ScriptDisplay uses
+      queryClient.invalidateQueries({ queryKey: ['scripts', 'display'] });
       toast.success("Objections saved!");
     } catch (error: any) {
       toast.error(error.message || "Failed to save");
@@ -177,7 +180,8 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
     setIsAdding(false);
   };
 
-  const objectionScriptName = stepName.includes("outbound") 
+  // Derive the alternatives script name - must match useObjectionAlternatives logic
+  const objectionScriptName = stepName === "outbound_objection" 
     ? "outbound_objection" 
     : "inbound_objection";
 

@@ -118,7 +118,7 @@ export const ListIdScriptEditor = ({ listId, stepName, stepTitle }: ListIdScript
   }
 
   const isNew = !scriptData;
-  const isObjectionStep = stepName.includes("objection");
+  const isObjectionStep = stepName.includes("objection") || stepName === "objectionHandling";
   const objectionScriptName = `listid_${listId}`;
 
   return (
