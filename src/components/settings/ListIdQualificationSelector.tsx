@@ -64,22 +64,60 @@ export const ListIdQualificationSelector = ({
   const [pendingSelections, setPendingSelections] = useState<Set<string>>(new Set());
   const storageKey = `qualification_script_selected_listid_${listId}`;
 
-  // Fetch the master questionnaire config - use inbound config as default for list IDs
+  // Fetch both inbound and outbound master configs and merge them
   const { data: masterConfig, isLoading: configLoading } = useQuery({
-    queryKey: ["qualification_master_config_inbound"],
+    queryKey: ["qualification_master_config_combined"],
     queryFn: async (): Promise<QualificationConfig> => {
       try {
-        const configData = await mysqlApi.findOneByField<{
-          setting_key: string;
-          setting_value: string;
-        }>("homebound_app_settings", "setting_key", "qualification_config_inbound");
+        // Fetch both inbound and outbound configs
+        const [inboundData, outboundData] = await Promise.all([
+          mysqlApi.findOneByField<{ setting_key: string; setting_value: string }>(
+            "homebound_app_settings", "setting_key", "qualification_config_inbound"
+          ),
+          mysqlApi.findOneByField<{ setting_key: string; setting_value: string }>(
+            "homebound_app_settings", "setting_key", "qualification_config_outbound"
+          ),
+        ]);
 
-        if (configData?.setting_value) {
-          const parsed = deserializeConfig(configData.setting_value);
-          if (parsed) return parsed;
+        const inboundConfig = inboundData?.setting_value 
+          ? deserializeConfig(inboundData.setting_value) 
+          : null;
+        const outboundConfig = outboundData?.setting_value 
+          ? deserializeConfig(outboundData.setting_value) 
+          : null;
+
+        // Merge configs - combine sections and deduplicate questions by ID
+        if (inboundConfig && outboundConfig) {
+          const sectionMap = new Map<string, typeof inboundConfig.sections[0]>();
+          
+          // Add inbound sections
+          inboundConfig.sections.forEach(section => {
+            sectionMap.set(section.id, { ...section });
+          });
+          
+          // Merge outbound sections
+          outboundConfig.sections.forEach(section => {
+            if (sectionMap.has(section.id)) {
+              const existing = sectionMap.get(section.id)!;
+              // Merge questions, avoiding duplicates
+              const questionIds = new Set(existing.questions.map(q => q.id));
+              const newQuestions = section.questions.filter(q => !questionIds.has(q.id));
+              sectionMap.set(section.id, {
+                ...existing,
+                questions: [...existing.questions, ...newQuestions],
+              });
+            } else {
+              sectionMap.set(section.id, { ...section });
+            }
+          });
+          
+          return {
+            version: inboundConfig.version,
+            sections: Array.from(sectionMap.values()),
+          };
         }
-
-        return DEFAULT_QUALIFICATION_CONFIG;
+        
+        return inboundConfig || outboundConfig || DEFAULT_QUALIFICATION_CONFIG;
       } catch (error) {
         console.error("Error loading master config:", error);
         return DEFAULT_QUALIFICATION_CONFIG;
