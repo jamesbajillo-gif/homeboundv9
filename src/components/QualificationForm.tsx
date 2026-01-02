@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
@@ -81,23 +81,49 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     }, {} as Record<string, any>),
   });
 
-  // Auto-save to API
+  // Debounce ref for API saves
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingDataRef = useRef<Record<string, any> | null>(null);
+
+  // Auto-save to API with debouncing (5 second delay to prevent API overload)
   const saveDraft = useCallback(async (data: Record<string, any>) => {
     const draftKey = getDraftKey();
     const draftData = JSON.stringify(data);
 
-    try {
-      await setAppSetting(draftKey, draftData, 'json', `Qualification form draft`);
-    } catch (error) {
-      console.error('Error saving draft:', error);
-    }
-
+    // Always save to localStorage immediately (it's local and fast)
     try {
       localStorage.setItem(draftKey, draftData);
     } catch (error) {
       console.error('Error saving draft to localStorage:', error);
     }
+
+    // Debounce API saves - store pending data and reset timer
+    pendingDataRef.current = data;
+    
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      if (pendingDataRef.current) {
+        try {
+          await setAppSetting(draftKey, JSON.stringify(pendingDataRef.current), 'json', `Qualification form draft`);
+        } catch (error) {
+          console.error('Error saving draft to API:', error);
+        }
+        pendingDataRef.current = null;
+      }
+    }, 5000); // 5 second debounce for API calls
   }, [getDraftKey]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load draft on mount
   useEffect(() => {
