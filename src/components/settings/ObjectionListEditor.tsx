@@ -163,27 +163,13 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       const objectionItem = items.find(i => i.type === 'objection');
       const content = objectionItem?.text || '';
       
-      const existingData = await mysqlApi.findOneByField<ScriptSection>(
-        "homebound_script",
-        "step_name",
-        stepName
-      );
-
-      if (existingData) {
-        await mysqlApi.updateByField(
-          "homebound_script",
-          "step_name",
-          stepName,
-          { title: stepTitle, content }
-        );
-      } else {
-        await mysqlApi.create("homebound_script", {
-          step_name: stepName,
-          title: stepTitle,
-          content,
-          button_config: [],
-        });
-      }
+      // Use upsert for reliable save - handles both insert and update
+      await mysqlApi.upsertByFields("homebound_script", {
+        step_name: stepName,
+        title: stepTitle,
+        content,
+        button_config: JSON.stringify([]),
+      });
 
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.byStep(stepName) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.scripts.all });
