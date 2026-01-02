@@ -300,6 +300,7 @@ export const REQUIRED_TABLES = [
   'homebound_script_question_alts',
   'homebound_spiel_alts',
   'homebound_objection_alts',
+  'homebound_script_submissions',
 ];
 
 /**
@@ -324,6 +325,8 @@ export function getTableSQL(tableName: string): string | null {
     'homebound_spiel_alts': `CREATE TABLE IF NOT EXISTS \`homebound_spiel_alts\` (\`id\` int(11) NOT NULL AUTO_INCREMENT, \`script_name\` varchar(100) NOT NULL, \`spiel_id\` varchar(100) NOT NULL, \`alt_text\` text NOT NULL, \`alt_order\` int(11) NOT NULL DEFAULT 0, \`is_default\` tinyint(1) NOT NULL DEFAULT 0, \`created_at\` datetime DEFAULT CURRENT_TIMESTAMP, \`updated_at\` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (\`id\`), UNIQUE KEY \`unique_script_spiel_order\` (\`script_name\`, \`spiel_id\`, \`alt_order\`), KEY \`idx_script_name\` (\`script_name\`), KEY \`idx_spiel_id\` (\`spiel_id\`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
 
     'homebound_objection_alts': `CREATE TABLE IF NOT EXISTS \`homebound_objection_alts\` (\`id\` int(11) NOT NULL AUTO_INCREMENT, \`script_name\` varchar(100) NOT NULL, \`objection_id\` varchar(100) NOT NULL, \`alt_text\` text NOT NULL, \`alt_order\` int(11) NOT NULL DEFAULT 0, \`is_default\` tinyint(1) NOT NULL DEFAULT 0, \`created_at\` datetime DEFAULT CURRENT_TIMESTAMP, \`updated_at\` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (\`id\`), UNIQUE KEY \`unique_script_objection_order\` (\`script_name\`, \`objection_id\`, \`alt_order\`), KEY \`idx_script_name\` (\`script_name\`), KEY \`idx_objection_id\` (\`objection_id\`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    'homebound_script_submissions': `CREATE TABLE IF NOT EXISTS \`homebound_script_submissions\` (\`id\` int(11) NOT NULL AUTO_INCREMENT, \`script_name\` varchar(100) NOT NULL COMMENT 'e.g., inbound_greeting, outbound_closingSuccess', \`spiel_id\` varchar(100) NOT NULL COMMENT 'Identifier for the base spiel, e.g., spiel_0', \`objection_id\` varchar(100) DEFAULT NULL COMMENT 'For objection submissions', \`submission_type\` enum('spiel','objection') NOT NULL COMMENT 'Type of script submission', \`alt_text\` text NOT NULL COMMENT 'The submitted script text', \`alt_order\` int(11) DEFAULT 1 COMMENT 'Order of this alternative (1-based)', \`submitted_by\` varchar(100) NOT NULL COMMENT 'User ID who submitted this', \`status\` enum('pending','approved','rejected') DEFAULT 'pending' COMMENT 'Submission status', \`approved_by\` varchar(100) DEFAULT NULL COMMENT 'User ID who approved/rejected', \`approved_at\` datetime DEFAULT NULL COMMENT 'When it was approved/rejected', \`rejection_reason\` text DEFAULT NULL COMMENT 'Reason for rejection if rejected', \`created_at\` timestamp DEFAULT CURRENT_TIMESTAMP, \`updated_at\` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (\`id\`), KEY \`idx_script_name\` (\`script_name\`), KEY \`idx_submitted_by\` (\`submitted_by\`), KEY \`idx_status\` (\`status\`), KEY \`idx_script_status\` (\`script_name\`,\`status\`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='User-submitted scripts awaiting approval';`,
   };
 
   return tableDefinitions[tableName] || null;

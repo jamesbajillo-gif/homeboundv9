@@ -7,6 +7,9 @@ import { mysqlApi } from "@/lib/mysqlApi";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { useVICI } from "@/contexts/VICIContext";
+import { getUserId } from "@/lib/userHistory";
+import { SubmissionsList } from "./SubmissionsList";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +57,9 @@ const ALTS_TABLE = "homebound_objection_alts";
 
 export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionListEditorProps) => {
   const queryClient = useQueryClient();
+  const { leadData } = useVICI();
+  const currentUserId = getUserId(leadData);
+  const isStandardUser = currentUserId === '001'; // Hide edit/delete for standard user
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<ListItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,7 +73,10 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
   const queryKey = listId 
     ? ["list-script", listId, stepName] 
     : QUERY_KEYS.scripts.byStep(stepName);
-  const altsScriptName = listId ? `listid_${listId}_${stepName}` : stepName;
+  // Build script name for alternatives - check if stepName already has listid prefix to avoid double-prefixing
+  const altsScriptName = listId 
+    ? (stepName.startsWith('listid_') ? stepName : `listid_${listId}_${stepName}`)
+    : stepName;
 
   // Fetch script using React Query
   const { data: section, isLoading } = useQuery({
@@ -302,23 +311,30 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
   }
 
   return (
+    <>
     <Card className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">{stepTitle}</h2>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsAdding(true)}
-            disabled={isAdding}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add
-          </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-            Save
-          </Button>
+          {/* Add button - hidden for standard user (001) */}
+          {!isStandardUser && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAdding(true)}
+              disabled={isAdding}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          )}
+          {/* Save button - hidden for standard user (001) */}
+          {!isStandardUser && (
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Save
+            </Button>
+          )}
         </div>
       </div>
 
@@ -385,26 +401,29 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
                   #{index + 1}
                 </span>
                 <pre className="flex-1 text-sm whitespace-pre-wrap font-sans">{item.text}</pre>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    onClick={() => handleStartEdit(item)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  {item.type === 'alternative' && (
+                {/* Edit and delete buttons - hidden for standard user (001) */}
+                {!isStandardUser && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-7 w-7 text-destructive"
-                      onClick={() => handleDeleteClick(item)}
+                      className="h-7 w-7"
+                      onClick={() => handleStartEdit(item)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                  )}
-                </div>
+                    {item.type === 'alternative' && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => handleDeleteClick(item)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -429,5 +448,13 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+    
+    {/* Pending Submissions - only shown for admin */}
+    <SubmissionsList 
+      scriptName={altsScriptName}
+      submissionType="objection"
+      stepTitle={stepTitle}
+    />
+  </>
   );
 };

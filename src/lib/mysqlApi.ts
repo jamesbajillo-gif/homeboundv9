@@ -117,7 +117,16 @@ export class MySQLApiClient {
       params.append('fields', options.fields.join(','));
     }
 
-    const response = await fetch(`${this.baseUrl}?${params}`);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}?${params}`);
+    } catch (error: any) {
+      // Handle network errors (including CORS)
+      if (error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
+        throw new Error('Network error: Unable to connect to server. Please check CORS configuration or network connection.');
+      }
+      throw error;
+    }
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
@@ -189,13 +198,22 @@ export class MySQLApiClient {
       table,
     });
 
-    const response = await fetch(`${this.baseUrl}?${params}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ data }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}?${params}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data }),
+      });
+    } catch (error: any) {
+      // Handle network errors (including CORS)
+      if (error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
+        throw new Error('Network error: Unable to connect to server. Please check CORS configuration or network connection.');
+      }
+      throw error;
+    }
     
     if (!response.ok) {
       // Try to get detailed error message from API
@@ -203,6 +221,13 @@ export class MySQLApiClient {
       try {
         const errorData = await response.json();
         errorMessage = errorData.message || errorData.error || errorData.error || errorMessage;
+        
+        // Check if error indicates table doesn't exist
+        const errorLower = errorMessage.toLowerCase();
+        if (errorLower.includes('table') && (errorLower.includes("doesn't exist") || errorLower.includes('not found'))) {
+          errorMessage = `Table '${table}' does not exist. Please run the database migration: database-migration-script-submissions.sql`;
+        }
+        
         // Include technical details if available
         if (errorData.error && errorData.error !== errorData.message) {
           errorMessage += ` (${errorData.error})`;
@@ -212,7 +237,12 @@ export class MySQLApiClient {
         try {
           const textError = await response.text();
           if (textError) {
-            errorMessage = textError.substring(0, 200); // Limit length
+            const errorLower = textError.toLowerCase();
+            if (errorLower.includes('table') && (errorLower.includes("doesn't exist") || errorLower.includes('not found'))) {
+              errorMessage = `Table '${table}' does not exist. Please run the database migration: database-migration-script-submissions.sql`;
+            } else {
+              errorMessage = textError.substring(0, 200); // Limit length
+            }
           }
         } catch {
           // Use default error message
@@ -224,7 +254,12 @@ export class MySQLApiClient {
     const result: ApiResponse<any> = await response.json();
     
     if (!result.success) {
-      throw new Error(result.error || result.message || 'Failed to create record');
+      // Check if error indicates table doesn't exist
+      const errorMsg = result.error || result.message || 'Failed to create record';
+      if (errorMsg.toLowerCase().includes('table') && errorMsg.toLowerCase().includes("doesn't exist")) {
+        throw new Error(`Table '${table}' does not exist. Please run the database migration: database-migration-script-submissions.sql`);
+      }
+      throw new Error(errorMsg);
     }
     
     // API returns inserted_ids array - check both root level and data property

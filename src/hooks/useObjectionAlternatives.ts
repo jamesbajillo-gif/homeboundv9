@@ -29,9 +29,12 @@ export const useObjectionAlternatives = (stepName: string) => {
   
   // Build the script name: listid_XXX_stepName or use stepName directly
   // Note: stepName should already include prefix (e.g., "outbound_objection") when passed from components
-  const scriptName = hasValidListId 
-    ? `listid_${viciListId}_${stepName}` 
-    : stepName;
+  // Check if stepName already has a prefix to avoid double-prefixing
+  const scriptName = stepName.startsWith('listid_')
+    ? stepName // Already has listid prefix
+    : hasValidListId 
+      ? `listid_${viciListId}_${stepName}` 
+      : stepName;
 
   // Fetch all alternatives for the current script
   const { data: alternatives = [], isLoading, refetch } = useQuery({

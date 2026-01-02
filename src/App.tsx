@@ -15,6 +15,7 @@ import ListIdManagement from "./pages/settings/ListIdManagement";
 import MySQLPage from "./pages/settings/MySQLPage";
 import ImportPage from "./pages/settings/ImportPage";
 import VICISettings from "./pages/settings/VICISettings";
+import { ProtectedSettingsRoute } from "./components/ProtectedSettingsRoute";
 
 const queryClient = new QueryClient();
 
@@ -27,15 +28,15 @@ const App = () => (
         <VICIProvider>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/settings/inbound" element={<InboundScripts />} />
-            <Route path="/settings/outbound" element={<OutboundScripts />} />
-            <Route path="/settings/forms" element={<FormsSettings />} />
-            <Route path="/settings/listid" element={<ListIdManagement />} />
-            <Route path="/settings/vici" element={<VICISettings />} />
-            <Route path="/settings/zapier" element={<ZapierPage />} />
-            <Route path="/settings/mysql" element={<MySQLPage />} />
-            <Route path="/settings/import" element={<ImportPage />} />
+            <Route path="/settings" element={<ProtectedSettingsRoute><Settings /></ProtectedSettingsRoute>} />
+            <Route path="/settings/inbound" element={<ProtectedSettingsRoute><InboundScripts /></ProtectedSettingsRoute>} />
+            <Route path="/settings/outbound" element={<ProtectedSettingsRoute><OutboundScripts /></ProtectedSettingsRoute>} />
+            <Route path="/settings/forms" element={<ProtectedSettingsRoute><FormsSettings /></ProtectedSettingsRoute>} />
+            <Route path="/settings/listid" element={<ProtectedSettingsRoute><ListIdManagement /></ProtectedSettingsRoute>} />
+            <Route path="/settings/vici" element={<ProtectedSettingsRoute><VICISettings /></ProtectedSettingsRoute>} />
+            <Route path="/settings/zapier" element={<ProtectedSettingsRoute><ZapierPage /></ProtectedSettingsRoute>} />
+            <Route path="/settings/mysql" element={<ProtectedSettingsRoute><MySQLPage /></ProtectedSettingsRoute>} />
+            <Route path="/settings/import" element={<ProtectedSettingsRoute><ImportPage /></ProtectedSettingsRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

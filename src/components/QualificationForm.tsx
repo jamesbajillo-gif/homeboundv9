@@ -12,6 +12,7 @@ import { useVICI } from "@/contexts/VICIContext";
 import { useGroup } from "@/contexts/GroupContext";
 import { Card } from "@/components/ui/card";
 import { getAppSetting, setAppSetting, deleteAppSetting } from "@/lib/migration";
+import { logUserAction } from "@/lib/userHistory";
 import { QualificationSection, VerifyDialog } from "./qualification";
 import { getEnabledSections, QualificationQuestion } from "@/config/qualificationConfig";
 
@@ -151,7 +152,6 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
           if (Object.keys(draft).length > 0) {
             lastSavedRef.current = JSON.stringify(draft);
             form.reset(draft);
-            toast.info('Draft restored');
             isResettingRef.current = false;
             return;
           }
@@ -167,7 +167,6 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
           if (Object.keys(draft).length > 0) {
             lastSavedRef.current = savedDraft;
             form.reset(draft);
-            toast.info('Draft restored');
           }
         }
       } catch (error) {
@@ -274,6 +273,15 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
       } catch (error) {
         console.error('Error clearing draft:', error);
       }
+
+      // Log user action
+      logUserAction(
+        leadData,
+        'submitted',
+        `Submitted qualification form for lead ${leadData.lead_id || 'unknown'}`,
+        undefined,
+        { leadId: leadData.lead_id, listId: leadData.list_id, groupType, testMode }
+      ).catch(err => console.error('Failed to log user action:', err));
 
       toast.success(testMode ? 'Test data sent to Zapier!' : 'Qualification submitted successfully!');
       setShowVerifyDialog(false);

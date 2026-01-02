@@ -30,11 +30,16 @@ export const useSpielAlternatives = (stepName: string) => {
   const hasValidListId = viciListId && !viciListId.includes('--A--');
   
   // Build the script name: listid_XXX_stepName or groupType_stepName or just stepName
-  const scriptName = hasValidListId 
-    ? `listid_${viciListId}_${stepName}` 
-    : groupType === "outbound" 
-      ? `outbound_${stepName}` 
-      : stepName;
+  // Check if stepName already has a prefix to avoid double-prefixing
+  const scriptName = stepName.startsWith('listid_')
+    ? stepName // Already has listid prefix
+    : stepName.startsWith('outbound_')
+      ? stepName // Already has outbound prefix
+      : hasValidListId 
+        ? `listid_${viciListId}_${stepName}` 
+        : groupType === "outbound" 
+          ? `outbound_${stepName}` 
+          : stepName;
 
   // Fetch all alternatives for the current script
   const { data: alternatives = [], isLoading, refetch } = useQuery({
@@ -138,3 +143,4 @@ export const useSpielAlternatives = (stepName: string) => {
     refetch,
   };
 };
+

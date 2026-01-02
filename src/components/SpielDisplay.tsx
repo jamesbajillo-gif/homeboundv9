@@ -1,11 +1,13 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Plus, Check, X, Pencil } from "lucide-react";
+import { RefreshCw, Plus, Check, X, Pencil, CheckCircle2 } from "lucide-react";
 import { useSpielAlternatives } from "@/hooks/useSpielAlternatives";
+import { useScriptSubmissions } from "@/hooks/useScriptSubmissions";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
+import { saveUserSpielSelection, logUserAction, getUserSpielSettings, getUserId, setUserSpielDefault } from "@/lib/userHistory";
 import { toast } from "sonner";
 import {
   Tooltip,
@@ -35,19 +37,31 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
     saveAlternative, 
     addAlternative,
     isSaving,
+    scriptName,
   } = useSpielAlternatives(stepName);
   
+  const { approvedSubmissions, userSubmissions, submitScript, isSubmitting: isSubmittingScript } = useScriptSubmissions(scriptName, 'spiel', leadData);
+  
+  // Initialize with 0, will be restored from database
   const [currentIndex, setCurrentIndex] = useState(0);
+  
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [newAltText, setNewAltText] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Build unified list: base spiel + alternatives
-  // Alternatives can exist even if base content is empty/deleted
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hasRestoredRef = useRef(false);
+  const hasLoggedViewRef = useRef(false);
+  const isUserCyclingRef = useRef(false); // Track if user is actively cycling
+  const [defaultIndex, setDefaultIndex] = useState<number | null>(null);
+  const [isSettingDefault, setIsSettingDefault] = useState(false);
+  
+  const currentUserId = getUserId(leadData);
+  
+  // Build unified list: base spiel + alternatives + approved submissions + user's own submissions
   const unifiedList = useMemo((): UnifiedItem[] => {
     const items: UnifiedItem[] = [];
+    const userId = getUserId(leadData);
     
     // Get alternatives first to check if we have any
     const alts = getAlternativesForSpiel('spiel_0');
@@ -58,21 +72,207 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
         spielId: 'spiel_0',
         text: content.trim(),
         isOriginal: true,
+        scriptType: 'default',
       });
     }
     
-    // Add alternatives for the base spiel
+    // Add alternatives for the base spiel (custom only - exclude approved submissions)
+    // Approved submissions are shown separately with "submitted by [user id]" badge
+    const approvedSubmissionTexts = new Set(approvedSubmissions.map(s => s.alt_text.trim()));
     alts.forEach((alt) => {
+      // Skip if this alternative matches an approved submission (to avoid duplicates)
+      if (!approvedSubmissionTexts.has(alt.alt_text.trim())) {
+        items.push({
+          spielId: 'spiel_0',
+          text: alt.alt_text,
+          isOriginal: false,
+          altOrder: alt.alt_order,
+          scriptType: 'custom',
+        });
+      }
+    });
+    
+    // Add approved submissions (globally available, shows "submitted by [user id]")
+    approvedSubmissions.forEach((submission) => {
       items.push({
         spielId: 'spiel_0',
-        text: alt.alt_text,
+        text: submission.alt_text,
         isOriginal: false,
-        altOrder: alt.alt_order,
+        altOrder: submission.alt_order,
+        submissionId: submission.id,
+        submittedBy: submission.submitted_by,
+        isSubmission: true,
+        isApproved: true,
+        scriptType: 'submitted',
       });
     });
     
+    // Add user's own pending/approved submissions (only visible to the submitter)
+    if (userId) {
+      userSubmissions.forEach((submission) => {
+        // Only add if not already in approved submissions
+        if (!approvedSubmissions.some(approved => approved.id === submission.id)) {
+          items.push({
+            spielId: 'spiel_0',
+            text: submission.alt_text,
+            isOriginal: false,
+            altOrder: submission.alt_order,
+            submissionId: submission.id,
+            submittedBy: submission.submitted_by,
+            isSubmission: true,
+            isApproved: submission.status === 'approved',
+            scriptType: 'submitted',
+          });
+        }
+      });
+    }
+    
     return items;
-  }, [content, getAlternativesForSpiel, alternatives]);
+  }, [content, getAlternativesForSpiel, alternatives, approvedSubmissions, userSubmissions, leadData]);
+
+  // Restore saved index from database when unifiedList is available
+  // This runs whenever the list changes to ensure we always show the saved selection
+  useEffect(() => {
+    if (unifiedList.length > 0) {
+      const restoreSelection = async () => {
+        try {
+          const userId = getUserId(leadData);
+          if (!userId) {
+            // No user logged in, use default index 0
+            hasRestoredRef.current = true;
+            return;
+          }
+
+          const dbSettings = await getUserSpielSettings(userId, stepName);
+          if (dbSettings && dbSettings[stepName]) {
+            const stepSettings = dbSettings[stepName];
+            
+            // Restore defaultIndex (which one is set as default) - prioritize this
+            // Check if defaultIndex exists (including 0, which is a valid default)
+            // Use typeof check to ensure it's actually a number, not just falsy
+            if (typeof stepSettings.defaultIndex === 'number') {
+              const userDefaultIndex = stepSettings.defaultIndex;
+              if (userDefaultIndex >= 0 && userDefaultIndex < unifiedList.length) {
+                setDefaultIndex(userDefaultIndex);
+                // Always show the default spiel on page load/refresh
+                setCurrentIndex(userDefaultIndex);
+                hasRestoredRef.current = true;
+                return;
+              }
+            }
+            
+            // If no default is set, use selectedIndex
+            if (typeof stepSettings.selectedIndex === 'number') {
+              const dbIndex = stepSettings.selectedIndex;
+              if (dbIndex >= 0 && dbIndex < unifiedList.length) {
+                setCurrentIndex(dbIndex);
+                setDefaultIndex(null);
+                hasRestoredRef.current = true;
+                return;
+              } else if (dbIndex >= unifiedList.length) {
+                // If saved index is out of bounds, reset to last valid index
+                const validIndex = Math.max(0, unifiedList.length - 1);
+                setCurrentIndex(validIndex);
+                setDefaultIndex(null);
+                // Save corrected index to database
+                await saveUserSpielSelection(leadData, stepName, validIndex, unifiedList.length);
+                hasRestoredRef.current = true;
+                return;
+              }
+            }
+            
+            // No valid index found in settings
+            setDefaultIndex(null);
+            hasRestoredRef.current = true;
+            return;
+          }
+          
+          // No saved selection found, use default index 0 (first/primary spiel)
+          setDefaultIndex(null);
+          hasRestoredRef.current = true;
+        } catch (error) {
+          console.error('Error loading saved spiel selection:', error);
+          hasRestoredRef.current = true;
+        }
+      };
+      
+      // Only restore if we haven't restored yet (to avoid overriding user actions)
+      if (!hasRestoredRef.current) {
+        restoreSelection();
+      } else {
+        // If list changed (e.g., alternatives added), validate and restore default from database
+        // Only validate if user is not actively cycling (to prevent double updates)
+        if (!isUserCyclingRef.current) {
+          const validateIndex = async () => {
+            const userId = getUserId(leadData);
+            if (!userId) return;
+
+            try {
+              const dbSettings = await getUserSpielSettings(userId, stepName);
+              if (dbSettings && dbSettings[stepName]) {
+                // Prioritize defaultIndex - always show default on refresh
+                const userDefaultIndex = dbSettings[stepName].defaultIndex;
+                if (userDefaultIndex !== undefined && userDefaultIndex >= 0 && userDefaultIndex < unifiedList.length) {
+                  if (currentIndex !== userDefaultIndex) {
+                    setCurrentIndex(userDefaultIndex);
+                  }
+                  if (defaultIndex !== userDefaultIndex) {
+                    setDefaultIndex(userDefaultIndex);
+                  }
+                  return;
+                }
+                
+                // If no default, use selectedIndex
+                const dbIndex = dbSettings[stepName].selectedIndex;
+                if (dbIndex >= 0 && dbIndex < unifiedList.length) {
+                  // Only update if current index doesn't match saved index
+                  if (currentIndex !== dbIndex) {
+                    setCurrentIndex(dbIndex);
+                  }
+                } else if (dbIndex >= unifiedList.length) {
+                  // If saved index is out of bounds, reset to last valid index
+                  const validIndex = Math.max(0, unifiedList.length - 1);
+                  setCurrentIndex(validIndex);
+                  await saveUserSpielSelection(leadData, stepName, validIndex, unifiedList.length);
+                }
+              }
+            } catch (error) {
+              console.error('Error validating index:', error);
+            }
+          };
+          validateIndex();
+        }
+      }
+    }
+  }, [unifiedList.length, leadData, stepName]); // Removed currentIndex from dependencies
+  
+  // Log when script is viewed (only once per component mount)
+  useEffect(() => {
+    if (unifiedList.length > 0 && !hasLoggedViewRef.current) {
+      hasLoggedViewRef.current = true;
+      logUserAction(
+        leadData,
+        'viewed',
+        `Viewed ${stepName} script section`,
+        undefined,
+        { stepName, listId: leadData.list_id }
+      ).catch(err => console.error('Failed to log view action:', err));
+    }
+  }, [unifiedList.length, stepName, leadData]);
+  
+  // Validate and adjust index when unifiedList changes (e.g., alternatives added/removed)
+  useEffect(() => {
+    if (unifiedList.length > 0 && currentIndex >= unifiedList.length) {
+      const validIndex = unifiedList.length - 1;
+      setCurrentIndex(validIndex);
+      // Save corrected index to database
+      const userId = getUserId(leadData);
+      if (userId) {
+        saveUserSpielSelection(leadData, stepName, validIndex, unifiedList.length)
+          .catch(err => console.error('Error saving adjusted spiel selection:', err));
+      }
+    }
+  }, [unifiedList.length, currentIndex, leadData, stepName]);
 
   // Safe current index
   const safeIndex = unifiedList.length > 0 ? currentIndex % unifiedList.length : 0;
@@ -81,16 +281,42 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
   // Cycle to next item
   const handleCycle = useCallback(() => {
     if (unifiedList.length > 1) {
-      setCurrentIndex((prev) => (prev + 1) % unifiedList.length);
+      // Mark that user is actively cycling to prevent validation from overriding
+      isUserCyclingRef.current = true;
+      
+      setCurrentIndex((prev) => {
+        const nextIndex = (prev + 1) % unifiedList.length;
+        
+        // Save to database asynchronously (don't await to avoid blocking UI)
+        saveUserSpielSelection(leadData, stepName, nextIndex, unifiedList.length)
+          .catch(err => console.error('Failed to save spiel selection:', err))
+          .finally(() => {
+            // Reset the flag after a short delay to allow state to settle
+            setTimeout(() => {
+              isUserCyclingRef.current = false;
+            }, 100);
+          });
+        
+        return nextIndex;
+      });
     }
-  }, [unifiedList.length]);
+  }, [unifiedList.length, leadData, stepName]);
 
   // Start editing current item
   const handleStartEdit = useCallback(() => {
     if (currentItem) {
       setIsEditing(true);
       setEditText(currentItem.text);
-      setTimeout(() => inputRef.current?.focus(), 0);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+        // Move cursor to end
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(
+            textareaRef.current.value.length,
+            textareaRef.current.value.length
+          );
+        }
+      }, 0);
     }
   }, [currentItem]);
 
@@ -105,28 +331,108 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
       // Editing original - save as new alternative
       await addAlternative(currentItem.spielId, editText.trim());
       toast.success("Alternative added");
+      
+      // Log user action
+      logUserAction(
+        leadData,
+        'added',
+        `Added new alternative for ${stepName}`,
+        undefined,
+        { stepName, altText: editText.trim() }
+      ).catch(err => console.error('Failed to log user action:', err));
     } else if (currentItem.altOrder !== undefined) {
       // Editing existing alternative
+      const previousText = currentItem.text;
       await saveAlternative(currentItem.spielId, editText.trim(), currentItem.altOrder);
       toast.success("Alternative saved");
+      
+      // Log user action
+      logUserAction(
+        leadData,
+        'modified',
+        `Modified alternative ${currentItem.altOrder} for ${stepName}`,
+        undefined,
+        { stepName, altOrder: currentItem.altOrder, previousText, newText: editText.trim() }
+      ).catch(err => console.error('Failed to log user action:', err));
     }
     
     setIsEditing(false);
     setEditText("");
-  }, [editText, currentItem, addAlternative, saveAlternative]);
+  }, [editText, currentItem, addAlternative, saveAlternative, leadData, stepName]);
 
-  // Add new alternative
+  // Set a specific spiel as default for logged-in user
+  const handleSetDefault = useCallback(async (index: number) => {
+    const userId = getUserId(leadData);
+    if (!userId) {
+      toast.error('Please log in to set default');
+      return;
+    }
+
+    // If editing the same item, save changes first
+    if (isEditing && editText.trim() && currentItem && index === safeIndex) {
+      await handleSaveEdit();
+    }
+
+    setIsSettingDefault(true);
+    try {
+      await setUserSpielDefault(leadData, stepName, index, unifiedList.length);
+      setDefaultIndex(index);
+      toast.success('Set as default');
+    } catch (error) {
+      console.error('Error setting default:', error);
+      toast.error('Failed to set default');
+    } finally {
+      setIsSettingDefault(false);
+    }
+  }, [leadData, stepName, unifiedList.length, isEditing, editText, currentItem, safeIndex, handleSaveEdit]);
+
+  // Add new script - saves as submission and sets as default for user
   const handleAddAlternative = useCallback(async () => {
     if (!newAltText.trim()) {
       setIsAdding(false);
       return;
     }
 
-    await addAlternative('spiel_0', newAltText.trim());
-    setIsAdding(false);
-    setNewAltText("");
-    toast.success("Alternative added");
-  }, [newAltText, addAlternative]);
+    if (!currentUserId) {
+      toast.error("Please log in to add scripts");
+      setIsAdding(false);
+      return;
+    }
+
+    try {
+      // Submit the script (saves as submission)
+      const existing = getAlternativesForSpiel('spiel_0');
+      const nextOrder = existing.length > 0 ? Math.max(...existing.map((a) => a.alt_order)) + 1 : 1;
+      await submitScript('spiel_0', newAltText.trim(), nextOrder);
+      
+      // Calculate the new index (it will be after all existing items)
+      const currentListLength = unifiedList.length;
+      const newIndex = currentListLength; // New submission will be at this index
+      
+      // Set as default for the user
+      await setUserSpielDefault(leadData, stepName, newIndex, currentListLength + 1);
+      setDefaultIndex(newIndex);
+      setCurrentIndex(newIndex);
+      
+      setIsAdding(false);
+      setNewAltText("");
+      toast.success("Script saved and set as your default");
+      
+      // Log user action
+      logUserAction(
+        leadData,
+        'submitted',
+        `Added and set as default script for ${stepName}`,
+        undefined,
+        { stepName, altText: newAltText.trim() }
+      ).catch(err => console.error('Failed to log user action:', err));
+    } catch (error) {
+      console.error('Error adding script:', error);
+      toast.error("Failed to add script");
+      setIsAdding(false);
+    }
+  }, [newAltText, submitScript, currentUserId, leadData, stepName, getAlternativesForSpiel, unifiedList.length]);
+
 
   // Empty state: no base content and no alternatives
   if (unifiedList.length === 0) {
@@ -138,6 +444,7 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
   }
 
   const displayText = currentItem ? replaceScriptVariables(currentItem.text, leadData) : "";
+  const isStandardUser = currentUserId === '001'; // Hide edit/delete for standard user
 
   return (
     <TooltipProvider>
@@ -169,98 +476,137 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
               </Tooltip>
             )}
             
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={handleStartEdit}
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{currentItem?.isOriginal ? 'Create alternative' : 'Edit'}</p>
-              </TooltipContent>
-            </Tooltip>
+            {/* Edit button - hidden for standard user (001) */}
+            {!isStandardUser && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={handleStartEdit}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{currentItem?.isOriginal ? 'Create alternative' : 'Edit'}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
             
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => {
-                    setIsAdding(true);
-                    setNewAltText("");
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Add alternative</p>
-              </TooltipContent>
-            </Tooltip>
+            {/* Add script button - available for all logged-in users */}
+            {currentUserId && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="p-1 text-muted-foreground hover:text-blue-600 transition-colors"
+                    onClick={() => {
+                      setIsAdding(true);
+                      setNewAltText("");
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Add script (saves as your default)</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
+            {/* Set as default icon - only show if current spiel is not already default */}
+            {defaultIndex !== safeIndex && getUserId(leadData) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="p-1 text-muted-foreground hover:text-green-600 transition-colors"
+                    onClick={() => handleSetDefault(safeIndex)}
+                    disabled={isSettingDefault}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Set as default</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         </div>
 
         {/* Content with colored left border */}
         <div className={`border-l-2 ${accentColor} pl-4`}>
           {isEditing ? (
-            <div className="flex gap-2">
-              <Input
-                ref={inputRef}
+            <div className="space-y-2">
+              <Textarea
+                ref={textareaRef}
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveEdit();
                   if (e.key === 'Escape') setIsEditing(false);
+                  // Ctrl/Cmd + Enter to save
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSaveEdit();
+                  }
                 }}
-                className="flex-1"
+                className="min-h-[200px] font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose resize-y whitespace-pre-wrap"
+                placeholder="Enter script text..."
                 autoFocus
               />
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={handleSaveEdit}
-                disabled={isSaving}
-              >
-                <Check className="h-4 w-4 text-green-500" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setIsEditing(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setIsEditing(false)}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveEdit}
+                  disabled={isSaving}
+                >
+                  <Check className="h-4 w-4 mr-1" />
+                  Save
+                </Button>
+              </div>
             </div>
           ) : isAdding ? (
-            <div className="flex gap-2">
-              <Input
+            <div className="space-y-2">
+              <Textarea
                 value={newAltText}
                 onChange={(e) => setNewAltText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddAlternative();
                   if (e.key === 'Escape') setIsAdding(false);
+                  // Ctrl/Cmd + Enter to save
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddAlternative();
+                  }
                 }}
                 placeholder="Enter alternative text..."
-                className="flex-1"
+                className="min-h-[200px] font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose resize-y whitespace-pre-wrap"
                 autoFocus
               />
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={handleAddAlternative}
-                disabled={isSaving || !newAltText.trim()}
-              >
-                <Check className="h-4 w-4 text-green-500" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setIsAdding(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setIsAdding(false)}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleAddAlternative}
+                  disabled={isSubmittingScript || !newAltText.trim()}
+                >
+                  <Check className="h-4 w-4 mr-1" />
+                  Save & Set Default
+                </Button>
+              </div>
             </div>
           ) : (
             <pre className="whitespace-pre-wrap font-sans text-foreground text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose">
@@ -268,6 +614,24 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
             </pre>
           )}
         </div>
+        
+        {/* Script type badge at bottom of script page */}
+        {currentItem && (
+          <div className="mt-2 flex justify-start">
+            <Badge 
+              variant="outline" 
+              className="text-xs px-2 py-0.5 font-normal border-border"
+            >
+              {currentItem.scriptType === 'default' && 'Default'}
+              {currentItem.scriptType === 'custom' && 'Custom'}
+              {currentItem.scriptType === 'submitted' && currentItem.submittedBy && (
+                currentItem.submittedBy === currentUserId 
+                  ? 'Submitted by you' 
+                  : `Submitted by ${currentItem.submittedBy}`
+              )}
+            </Badge>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );

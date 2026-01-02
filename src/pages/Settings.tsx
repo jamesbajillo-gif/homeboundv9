@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getAppSetting, setAppSetting } from "@/lib/migration";
 import { DEFAULT_DB_CONFIG } from "@/lib/mysqlApi";
-
 const Settings = () => {
   const navigate = useNavigate();
   const [debugMode, setDebugMode] = useState(false);
