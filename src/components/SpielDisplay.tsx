@@ -45,10 +45,14 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Build unified list: base spiel + alternatives
+  // Alternatives can exist even if base content is empty/deleted
   const unifiedList = useMemo((): UnifiedItem[] => {
     const items: UnifiedItem[] = [];
     
-    // Add original content as first item
+    // Get alternatives first to check if we have any
+    const alts = getAlternativesForSpiel('spiel_0');
+    
+    // Add original content as first item (only if it exists)
     if (content && content.trim()) {
       items.push({
         spielId: 'spiel_0',
@@ -58,7 +62,6 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
     }
     
     // Add alternatives for the base spiel
-    const alts = getAlternativesForSpiel('spiel_0');
     alts.forEach((alt) => {
       items.push({
         spielId: 'spiel_0',
@@ -125,12 +128,11 @@ export const SpielDisplay = ({ content, stepName, accentColor = "border-primary"
     toast.success("Alternative added");
   }, [newAltText, addAlternative]);
 
+  // Empty state: no base content and no alternatives
   if (unifiedList.length === 0) {
     return (
       <div className="prose prose-sm md:prose-base max-w-none">
-        <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-          {replaceScriptVariables(content, leadData)}
-        </pre>
+        <p className="text-muted-foreground italic">No script content configured. Add content in Settings.</p>
       </div>
     );
   }
