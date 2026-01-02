@@ -4,7 +4,7 @@ import { QualificationForm } from "@/components/QualificationForm";
 import { ObjectionDisplay } from "@/components/ObjectionDisplay";
 import { SpielDisplay } from "@/components/SpielDisplay";
 import { mysqlApi } from "@/lib/mysqlApi";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 import { Separator } from "@/components/ui/separator";
 import { ScriptNavigation } from "./ScriptNavigation";
+import { useTabVisibility } from "@/hooks/useTabVisibility";
 
 type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
 
@@ -21,13 +22,22 @@ interface ScriptDisplayProps {
   onQualificationSubmitRef?: (submitFn: () => void) => void;
 }
 
-// Define the order and metadata for each section
-const SECTION_ORDER: { id: ScriptStep; title: string; icon: typeof Phone; color: string }[] = [
-  { id: "greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500" },
-  { id: "qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500" },
-  { id: "objectionHandling", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500" },
-  { id: "closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500" },
-  { id: "closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500" },
+// Define the order and metadata for each section with visibility keys
+const SECTION_CONFIG: { id: ScriptStep; visibilityKey: string; title: string; icon: typeof Phone; color: string }[] = [
+  { id: "greeting", visibilityKey: "inbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500" },
+  { id: "qualification", visibilityKey: "inbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500" },
+  { id: "objectionHandling", visibilityKey: "inbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500" },
+  { id: "closingNotInterested", visibilityKey: "inbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500" },
+  { id: "closingSuccess", visibilityKey: "inbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500" },
+];
+
+// Outbound section config with different visibility keys
+const OUTBOUND_SECTION_CONFIG: { id: ScriptStep; visibilityKey: string; title: string; icon: typeof Phone; color: string }[] = [
+  { id: "greeting", visibilityKey: "outbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500" },
+  { id: "qualification", visibilityKey: "outbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500" },
+  { id: "objectionHandling", visibilityKey: "outbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500" },
+  { id: "closingNotInterested", visibilityKey: "outbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500" },
+  { id: "closingSuccess", visibilityKey: "outbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500" },
 ];
 
 export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) => {
@@ -35,11 +45,23 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const [usingListIdScripts, setUsingListIdScripts] = useState(false);
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [activeListName, setActiveListName] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<ScriptStep>(SECTION_ORDER[0].id);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { groupType } = useGroup();
   const { leadData } = useVICI();
   const viciListId = leadData?.list_id;
+  
+  // Get visibility settings based on group type
+  const { isTabVisible, isLoading: visibilityLoading } = useTabVisibility(groupType);
+  
+  // Get the section config based on group type
+  const sectionConfig = groupType === "outbound" ? OUTBOUND_SECTION_CONFIG : SECTION_CONFIG;
+  
+  // Filter sections based on visibility settings
+  const visibleSections = useMemo(() => {
+    return sectionConfig.filter(section => isTabVisible(section.visibilityKey));
+  }, [sectionConfig, isTabVisible]);
+  
+  const [activeSection, setActiveSection] = useState<ScriptStep>(visibleSections[0]?.id || "greeting");
 
   // Handle navigation to a section (smooth scroll)
   const handleNavigate = useCallback((sectionId: string) => {
@@ -54,6 +76,13 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     }
   }, []);
 
+  // Update active section when visible sections change
+  useEffect(() => {
+    if (visibleSections.length > 0 && !visibleSections.find(s => s.id === activeSection)) {
+      setActiveSection(visibleSections[0].id);
+    }
+  }, [visibleSections, activeSection]);
+
   // Track scroll position to update active section
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -63,11 +92,11 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
       const containerHeight = container.offsetHeight;
       const scrollPosition = container.scrollTop + containerHeight / 3;
       
-      for (let i = SECTION_ORDER.length - 1; i >= 0; i--) {
-        const element = document.getElementById(SECTION_ORDER[i].id);
+      for (let i = visibleSections.length - 1; i >= 0; i--) {
+        const element = document.getElementById(visibleSections[i].id);
         if (element && element.offsetTop - container.offsetTop <= scrollPosition) {
-          if (SECTION_ORDER[i].id !== activeSection) {
-            setActiveSection(SECTION_ORDER[i].id);
+          if (visibleSections[i].id !== activeSection) {
+            setActiveSection(visibleSections[i].id);
           }
           break;
         }
@@ -76,27 +105,27 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [activeSection]);
+  }, [activeSection, visibleSections]);
 
   // Keyboard navigation (up/down arrows)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const currentIndex = SECTION_ORDER.findIndex(s => s.id === activeSection);
+      const currentIndex = visibleSections.findIndex(s => s.id === activeSection);
       
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
         e.preventDefault();
-        const nextIndex = Math.min(currentIndex + 1, SECTION_ORDER.length - 1);
-        handleNavigate(SECTION_ORDER[nextIndex].id);
+        const nextIndex = Math.min(currentIndex + 1, visibleSections.length - 1);
+        handleNavigate(visibleSections[nextIndex].id);
       } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
         e.preventDefault();
         const prevIndex = Math.max(currentIndex - 1, 0);
-        handleNavigate(SECTION_ORDER[prevIndex].id);
+        handleNavigate(visibleSections[prevIndex].id);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeSection, handleNavigate]);
+  }, [activeSection, handleNavigate, visibleSections]);
 
   // Fetch scripts using React Query - auto-refreshes when cache is invalidated
   const { data: fetchedScriptData, isLoading: loading } = useQuery({
@@ -229,7 +258,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     };
   };
 
-  if (loading) {
+  if (loading || visibilityLoading) {
     return (
       <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
         <div className="max-w-5xl mx-auto flex items-center justify-center h-[calc(100vh-200px)]">
@@ -249,6 +278,15 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     );
   }
 
+  if (visibleSections.length === 0) {
+    return (
+      <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-center text-muted-foreground text-sm md:text-base">No script sections are visible. Configure visibility in Settings.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-20 h-full">
@@ -268,7 +306,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
           className="flex-1 overflow-y-auto snap-y snap-mandatory h-[calc(100vh-180px)] md:h-[calc(100vh-200px)] scroll-smooth"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          {SECTION_ORDER.map((section, index) => {
+          {visibleSections.map((section, index) => {
             const sectionData = scriptData[section.id];
             const Icon = section.icon;
             const processedContent = sectionData 
@@ -295,7 +333,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-[10px] md:text-xs font-medium">
-                            {index + 1} of {SECTION_ORDER.length}
+                            {index + 1} of {visibleSections.length}
                           </Badge>
                         </div>
                         <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold text-foreground mt-1">
@@ -357,7 +395,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
         
         {/* Fixed bottom navigation */}
         <ScriptNavigation
-          sections={SECTION_ORDER}
+          sections={visibleSections}
           activeSection={activeSection}
           onNavigate={handleNavigate}
         />

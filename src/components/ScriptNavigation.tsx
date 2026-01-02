@@ -8,6 +8,7 @@ interface Section {
   title: string;
   icon: LucideIcon;
   color: string;
+  visibilityKey?: string;
 }
 
 interface ScriptNavigationProps {
