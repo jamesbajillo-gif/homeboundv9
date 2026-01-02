@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Plus, Check, X, Pencil, Trash2 } from "lucide-react";
-import { useObjectionAlternatives, ObjectionAlternative } from "@/hooks/useObjectionAlternatives";
+import { RefreshCw, Plus, Check, X, Pencil } from "lucide-react";
+import { useObjectionAlternatives } from "@/hooks/useObjectionAlternatives";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
 import { toast } from "sonner";
@@ -13,7 +13,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 
 interface ObjectionDisplayProps {
   content: string;
@@ -26,6 +25,13 @@ interface ParsedObjection {
   lineIndex: number;
 }
 
+interface UnifiedItem {
+  objectionId: string;
+  text: string;
+  isOriginal: boolean;
+  altOrder?: number;
+}
+
 export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
   const { leadData } = useVICI();
   const { 
@@ -33,21 +39,17 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
     getAlternativesForObjection, 
     saveAlternative, 
     addAlternative,
-    deleteAlternative,
     isSaving,
-    scriptName 
   } = useObjectionAlternatives();
   
-  const [currentAltIndexes, setCurrentAltIndexes] = useState<Record<string, number>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState("");
-  const [addingToId, setAddingToId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
   const [newAltText, setNewAltText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Parse objections from content - expects format like:
-  // **Objection Title**
-  // Response text here
+  // Parse objections from content
   const parseObjections = useCallback((rawContent: string): ParsedObjection[] => {
     const lines = rawContent.split('\n');
     const objections: ParsedObjection[] = [];
@@ -57,12 +59,10 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
     lines.forEach((line, index) => {
       const trimmed = line.trim();
       
-      // Check for objection title (bold format or numbered format)
       const boldMatch = trimmed.match(/^\*\*(.+?)\*\*$/);
       const numberedMatch = trimmed.match(/^(\d+[\.\)]\s*)(.+)$/);
       
       if (boldMatch || (numberedMatch && trimmed.length < 100)) {
-        // Save previous objection
         if (currentObjection?.title) {
           objections.push({
             id: `objection_${objections.length}`,
@@ -72,7 +72,6 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
           });
         }
         
-        // Start new objection
         currentObjection = {
           title: boldMatch ? boldMatch[1] : (numberedMatch ? numberedMatch[2] : trimmed),
           lineIndex: index,
@@ -83,7 +82,6 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
       }
     });
 
-    // Don't forget the last objection
     if (currentObjection?.title) {
       objections.push({
         id: `objection_${objections.length}`,
@@ -93,7 +91,6 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
       });
     }
 
-    // If no structured objections found, treat each paragraph as an objection
     if (objections.length === 0 && rawContent.trim()) {
       const paragraphs = rawContent.split(/\n\n+/).filter(p => p.trim());
       paragraphs.forEach((para, idx) => {
@@ -113,108 +110,86 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
 
   const objections = parseObjections(content);
 
-  // Get current text for an objection (considering alternatives)
-  const getCurrentText = useCallback((objection: ParsedObjection) => {
-    const alts = getAlternativesForObjection(objection.id);
-    const currentIndex = currentAltIndexes[objection.id] || 0;
+  // Build unified list: all objections + their alternatives in one flat array
+  const unifiedList = useMemo((): UnifiedItem[] => {
+    const items: UnifiedItem[] = [];
     
-    // All options: original + alternatives
-    const allOptions = [
-      { text: objection.response, source: 'original' as const },
-      ...alts.map(alt => ({ text: alt.alt_text, source: 'alt' as const, order: alt.alt_order }))
-    ];
+    objections.forEach((objection) => {
+      // Add original
+      items.push({
+        objectionId: objection.id,
+        text: objection.response,
+        isOriginal: true,
+      });
+      
+      // Add alternatives for this objection
+      const alts = getAlternativesForObjection(objection.id);
+      alts.forEach((alt) => {
+        items.push({
+          objectionId: objection.id,
+          text: alt.alt_text,
+          isOriginal: false,
+          altOrder: alt.alt_order,
+        });
+      });
+    });
     
-    const safeIndex = currentIndex % allOptions.length;
-    return {
-      text: replaceScriptVariables(allOptions[safeIndex].text, leadData),
-      source: allOptions[safeIndex].source,
-      totalCount: allOptions.length,
-      currentIndex: safeIndex,
-    };
-  }, [getAlternativesForObjection, currentAltIndexes, leadData]);
+    return items;
+  }, [objections, getAlternativesForObjection, alternatives]);
 
-  // Cycle to next alternative
-  const handleCycle = useCallback((objectionId: string) => {
-    const alts = getAlternativesForObjection(objectionId);
-    const totalCount = 1 + alts.length; // original + alternatives
-    
-    setCurrentAltIndexes(prev => ({
-      ...prev,
-      [objectionId]: ((prev[objectionId] || 0) + 1) % totalCount
-    }));
-  }, [getAlternativesForObjection]);
+  // Safe current index
+  const safeIndex = unifiedList.length > 0 ? currentIndex % unifiedList.length : 0;
+  const currentItem = unifiedList[safeIndex];
 
-  // Start editing current alternative
-  const handleStartEdit = useCallback((objectionId: string, currentText: string) => {
-    setEditingId(objectionId);
-    setEditText(currentText);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }, []);
+  // Cycle to next item
+  const handleCycle = useCallback(() => {
+    if (unifiedList.length > 1) {
+      setCurrentIndex((prev) => (prev + 1) % unifiedList.length);
+    }
+  }, [unifiedList.length]);
 
-  // Save edited alternative
-  const handleSaveEdit = useCallback(async (objection: ParsedObjection) => {
-    if (!editText.trim()) {
-      setEditingId(null);
+  // Start editing current item
+  const handleStartEdit = useCallback(() => {
+    if (currentItem) {
+      setIsEditing(true);
+      setEditText(currentItem.text);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [currentItem]);
+
+  // Save edited item
+  const handleSaveEdit = useCallback(async () => {
+    if (!editText.trim() || !currentItem) {
+      setIsEditing(false);
       return;
     }
 
-    const currentIndex = currentAltIndexes[objection.id] || 0;
-    const alts = getAlternativesForObjection(objection.id);
-    
-    if (currentIndex === 0) {
+    if (currentItem.isOriginal) {
       // Editing original - save as new alternative
-      await addAlternative(objection.id, editText.trim());
-      // Move to the new alternative
-      setCurrentAltIndexes(prev => ({
-        ...prev,
-        [objection.id]: alts.length + 1
-      }));
-    } else {
+      await addAlternative(currentItem.objectionId, editText.trim());
+      toast.success("Alternative added");
+    } else if (currentItem.altOrder !== undefined) {
       // Editing existing alternative
-      const altIndex = currentIndex - 1;
-      if (alts[altIndex]) {
-        await saveAlternative(objection.id, editText.trim(), alts[altIndex].alt_order);
-      }
+      await saveAlternative(currentItem.objectionId, editText.trim(), currentItem.altOrder);
+      toast.success("Alternative saved");
     }
     
-    setEditingId(null);
+    setIsEditing(false);
     setEditText("");
-    toast.success("Alternative saved");
-  }, [editText, currentAltIndexes, getAlternativesForObjection, addAlternative, saveAlternative]);
+  }, [editText, currentItem, addAlternative, saveAlternative]);
 
   // Add new alternative
-  const handleAddAlternative = useCallback(async (objectionId: string) => {
-    if (!newAltText.trim()) {
-      setAddingToId(null);
+  const handleAddAlternative = useCallback(async () => {
+    if (!newAltText.trim() || !currentItem) {
+      setIsAdding(false);
       return;
     }
 
-    await addAlternative(objectionId, newAltText.trim());
-    setAddingToId(null);
+    await addAlternative(currentItem.objectionId, newAltText.trim());
+    setIsAdding(false);
     setNewAltText("");
     toast.success("Alternative added");
-  }, [newAltText, addAlternative]);
-
-  // Delete current alternative
-  const handleDeleteAlternative = useCallback(async (objection: ParsedObjection) => {
-    const currentIndex = currentAltIndexes[objection.id] || 0;
-    if (currentIndex === 0) {
-      toast.error("Cannot delete original text");
-      return;
-    }
-
-    const alts = getAlternativesForObjection(objection.id);
-    const altIndex = currentIndex - 1;
-    if (alts[altIndex]) {
-      await deleteAlternative(objection.id, alts[altIndex].alt_order);
-      // Move back to previous
-      setCurrentAltIndexes(prev => ({
-        ...prev,
-        [objection.id]: Math.max(0, currentIndex - 1)
-      }));
-      toast.success("Alternative deleted");
-    }
-  }, [currentAltIndexes, getAlternativesForObjection, deleteAlternative]);
+  }, [newAltText, currentItem, addAlternative]);
 
   if (objections.length === 0) {
     return (
@@ -226,183 +201,143 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
     );
   }
 
+  const displayText = currentItem ? replaceScriptVariables(currentItem.text, leadData) : "";
+
   return (
     <TooltipProvider>
-      <div className="space-y-6">
-        {objections.map((objection) => {
-          const { text, source, totalCount, currentIndex } = getCurrentText(objection);
-          const hasAlternatives = totalCount > 1;
-          const isEditing = editingId === objection.id;
-          const isAdding = addingToId === objection.id;
+      <div className="border-l-4 border-amber-500 bg-card rounded-r-lg">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-3">
+            <Badge variant="secondary" className="text-xs font-medium">
+              {safeIndex + 1} of {unifiedList.length}
+            </Badge>
+            <span className="font-semibold text-foreground">Objection Handling</span>
+          </div>
+          
+          {/* Action buttons */}
+          <div className="flex items-center gap-1">
+            {unifiedList.length > 1 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={handleCycle}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Next ({safeIndex + 1}/{unifiedList.length})</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  onClick={handleStartEdit}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{currentItem?.isOriginal ? 'Create alternative' : 'Edit'}</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setIsAdding(true);
+                    setNewAltText("");
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add alternative</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
 
-          return (
-            <div 
-              key={objection.id} 
-              className="border-l-2 border-amber-500/50 pl-4 py-2 group"
-            >
-              {/* Objection Title with Action Buttons */}
-              <div className="flex items-center gap-2 mb-2">
-                <h4 className="font-semibold text-foreground">{objection.title}</h4>
-                {hasAlternatives && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {currentIndex + 1}/{totalCount}
-                  </Badge>
-                )}
-                {source === 'alt' && (
-                  <Badge variant="outline" className="text-[10px] text-primary">
-                    {scriptName.replace('_objection', '')}
-                  </Badge>
-                )}
-                
-                {/* Action buttons - always visible next to title */}
-                <div className="flex items-center gap-0.5 ml-auto">
-                  {/* Cycle button */}
-                  {hasAlternatives && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => handleCycle(objection.id)}
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Cycle alternatives ({currentIndex + 1}/{totalCount})</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  
-                  {/* Edit button */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => handleStartEdit(objection.id, text)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{source === 'original' ? 'Create alternative' : 'Edit alternative'}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
-                  {/* Add button */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => {
-                          setAddingToId(objection.id);
-                          setNewAltText("");
-                        }}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Add alternative</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  
-                  {/* Delete button - only for alternatives */}
-                  {source === 'alt' && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => handleDeleteAlternative(objection)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Delete this alternative</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-              </div>
-
-              {/* Response Text */}
-              {isEditing ? (
-                <div className="flex gap-2">
-                  <Input
-                    ref={inputRef}
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveEdit(objection);
-                      if (e.key === 'Escape') setEditingId(null);
-                    }}
-                    className="flex-1 text-sm"
-                    autoFocus
-                  />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleSaveEdit(objection)}
-                    disabled={isSaving}
-                  >
-                    <Check className="h-4 w-4 text-green-500" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setEditingId(null)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed text-foreground">
-                  {text}
-                </pre>
-              )}
-
-              {/* Add new alternative input */}
-              {isAdding && (
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    value={newAltText}
-                    onChange={(e) => setNewAltText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddAlternative(objection.id);
-                      if (e.key === 'Escape') setAddingToId(null);
-                    }}
-                    placeholder="Enter alternative response..."
-                    className="flex-1 text-sm"
-                    autoFocus
-                  />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleAddAlternative(objection.id)}
-                    disabled={isSaving || !newAltText.trim()}
-                  >
-                    <Check className="h-4 w-4 text-green-500" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setAddingToId(null)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+        {/* Content */}
+        <div className="p-4">
+          {isEditing ? (
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveEdit();
+                  if (e.key === 'Escape') setIsEditing(false);
+                }}
+                className="flex-1"
+                autoFocus
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+              >
+                <Check className="h-4 w-4 text-green-500" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setIsEditing(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          );
-        })}
+          ) : isAdding ? (
+            <div className="flex gap-2">
+              <Input
+                value={newAltText}
+                onChange={(e) => setNewAltText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddAlternative();
+                  if (e.key === 'Escape') setIsAdding(false);
+                }}
+                placeholder="Enter alternative response..."
+                className="flex-1"
+                autoFocus
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleAddAlternative}
+                disabled={isSaving || !newAltText.trim()}
+              >
+                <Check className="h-4 w-4 text-green-500" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setIsAdding(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed text-foreground">
+              {displayText}
+            </pre>
+          )}
+        </div>
       </div>
     </TooltipProvider>
   );
