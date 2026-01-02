@@ -1,18 +1,31 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList } from "@/components/ui/tabs";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { ArrowLeft, Trash2, Pencil, X, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SpielListEditor } from "@/components/settings/SpielListEditor";
 import { QualificationScriptSelector } from "@/components/settings/QualificationScriptSelector";
 import { ObjectionListEditor } from "@/components/settings/ObjectionListEditor";
 import { AddTabDialog } from "@/components/settings/AddTabDialog";
+import { SortableTab } from "@/components/settings/SortableTab";
 import { useCustomTabs } from "@/hooks/useCustomTabs";
 import { useTabVisibility } from "@/hooks/useTabVisibility";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { useTabOrder } from "@/hooks/useTabOrder";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +41,7 @@ const OutboundScripts = () => {
   const navigate = useNavigate();
   const { tabs, isLoading, createTab, updateTab, deleteTab, isCreating, isDeleting } = useCustomTabs("outbound");
   const { isTabVisible, setTabVisibility, isUpdating: isVisibilityUpdating } = useTabVisibility("outbound");
+  const { order, setTabOrder, getOrderedTabs, isLoading: isOrderLoading } = useTabOrder("outbound");
   
   const [editingTab, setEditingTab] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -42,8 +56,44 @@ const OutboundScripts = () => {
     { key: "outbound_closingSuccess", title: "Success", stepName: "outbound_closingSuccess" },
   ];
 
-  const handleStartEdit = (tabKey: string, currentTitle: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Combine and order all tabs
+  const allTabs = useMemo(() => {
+    const customTabsMapped = tabs.map(t => ({ key: t.tab_key, title: t.tab_title, stepName: t.tab_key, isCustom: true }));
+    const fixedTabsMapped = fixedTabs.map(t => ({ ...t, isCustom: false }));
+    const combined = [...fixedTabsMapped, ...customTabsMapped];
+    return getOrderedTabs(combined);
+  }, [tabs, fixedTabs, getOrderedTabs]);
+
+  const tabIds = useMemo(() => allTabs.map(t => t.key), [allTabs]);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const oldIndex = tabIds.indexOf(active.id as string);
+      const newIndex = tabIds.indexOf(over.id as string);
+      
+      const newOrder = [...tabIds];
+      newOrder.splice(oldIndex, 1);
+      newOrder.splice(newIndex, 0, active.id as string);
+      
+      await setTabOrder(newOrder);
+    }
+  };
+
+  const handleStartEdit = (tabKey: string, currentTitle: string) => {
     setEditingTab(tabKey);
     setEditTitle(currentTitle);
   };
@@ -56,8 +106,7 @@ const OutboundScripts = () => {
     setEditTitle("");
   };
 
-  const handleDeleteClick = (tabKey: string, tabTitle: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteClick = (tabKey: string, tabTitle: string) => {
     setDeleteTarget({ key: tabKey, title: tabTitle });
   };
 
@@ -68,7 +117,7 @@ const OutboundScripts = () => {
     }
   };
 
-  const totalTabs = fixedTabs.length + tabs.length;
+  const defaultTab = allTabs[0]?.key || "outbound_greeting";
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -88,7 +137,7 @@ const OutboundScripts = () => {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || isOrderLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -96,75 +145,40 @@ const OutboundScripts = () => {
         <ScrollArea className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">
             <div className="max-w-6xl mx-auto">
-              <Tabs defaultValue="outbound_greeting" className="w-full">
+              <Tabs defaultValue={defaultTab} className="w-full">
                 <ScrollArea className="w-full">
-                  <TabsList className={`inline-flex w-auto min-w-full`}>
-                    {fixedTabs.map((tab) => (
-                      <TabsTrigger key={tab.key} value={tab.key} className="flex-shrink-0 gap-2">
-                        <Checkbox
-                          checked={isTabVisible(tab.key)}
-                          onCheckedChange={(checked) => setTabVisibility(tab.key, !!checked)}
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={isVisibilityUpdating}
-                          className="h-3.5 w-3.5"
-                        />
-                        {tab.title}
-                      </TabsTrigger>
-                    ))}
-                    {tabs.map((tab) => (
-                      <TabsTrigger key={tab.tab_key} value={tab.tab_key} className="flex-shrink-0 group relative pr-8 gap-2">
-                        <Checkbox
-                          checked={isTabVisible(tab.tab_key)}
-                          onCheckedChange={(checked) => setTabVisibility(tab.tab_key, !!checked)}
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={isVisibilityUpdating}
-                          className="h-3.5 w-3.5"
-                        />
-                        {editingTab === tab.tab_key ? (
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Input
-                              value={editTitle}
-                              onChange={(e) => setEditTitle(e.target.value)}
-                              className="h-6 w-24 text-xs"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveEdit(tab.tab_key);
-                                if (e.key === "Escape") setEditingTab(null);
-                              }}
-                            />
-                            <Button size="icon" variant="ghost" className="h-5 w-5 p-0" onClick={() => handleSaveEdit(tab.tab_key)}>
-                              <Check className="h-3 w-3" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-5 w-5 p-0" onClick={() => setEditingTab(null)}>
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <>
-                            {tab.tab_title}
-                            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                className="p-0.5 hover:bg-muted rounded"
-                                onClick={(e) => handleStartEdit(tab.tab_key, tab.tab_title, e)}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                              <button
-                                className="p-0.5 hover:bg-destructive/20 rounded text-destructive"
-                                onClick={(e) => handleDeleteClick(tab.tab_key, tab.tab_title, e)}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
+                      <TabsList className="inline-flex w-auto min-w-full">
+                        {allTabs.map((tab) => (
+                          <SortableTab
+                            key={tab.key}
+                            id={tab.key}
+                            title={tab.title}
+                            isVisible={isTabVisible(tab.key)}
+                            onVisibilityChange={(visible) => setTabVisibility(tab.key, visible)}
+                            isVisibilityUpdating={isVisibilityUpdating}
+                            isEditing={editingTab === tab.key}
+                            editTitle={editTitle}
+                            onEditTitleChange={setEditTitle}
+                            onStartEdit={() => handleStartEdit(tab.key, tab.title)}
+                            onSaveEdit={() => handleSaveEdit(tab.key)}
+                            onCancelEdit={() => setEditingTab(null)}
+                            onDelete={() => handleDeleteClick(tab.key, tab.title)}
+                            isCustomTab={tab.isCustom}
+                          />
+                        ))}
+                      </TabsList>
+                    </SortableContext>
+                  </DndContext>
                   <ScrollBar orientation="horizontal" />
                 </ScrollArea>
 
-                {/* Fixed tab contents */}
+                {/* Tab contents */}
                 <TabsContent value="outbound_greeting" className="mt-6">
                   <SpielListEditor stepName="outbound_greeting" stepTitle="Opening Greeting" />
                 </TabsContent>

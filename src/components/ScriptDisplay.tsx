@@ -15,6 +15,7 @@ import { QUERY_KEYS } from "@/lib/queryKeys";
 import { Separator } from "@/components/ui/separator";
 import { ScriptNavigation } from "./ScriptNavigation";
 import { useTabVisibility } from "@/hooks/useTabVisibility";
+import { useTabOrder } from "@/hooks/useTabOrder";
 
 type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
 
@@ -50,16 +51,21 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const { leadData } = useVICI();
   const viciListId = leadData?.list_id;
   
-  // Get visibility settings based on group type
+  // Get visibility and order settings based on group type
   const { isTabVisible, isLoading: visibilityLoading } = useTabVisibility(groupType);
+  const { getOrderedTabs, isLoading: orderLoading } = useTabOrder(groupType);
   
   // Get the section config based on group type
   const sectionConfig = groupType === "outbound" ? OUTBOUND_SECTION_CONFIG : SECTION_CONFIG;
   
-  // Filter sections based on visibility settings
+  // Filter and order sections based on visibility and order settings
   const visibleSections = useMemo(() => {
-    return sectionConfig.filter(section => isTabVisible(section.visibilityKey));
-  }, [sectionConfig, isTabVisible]);
+    const visible = sectionConfig.filter(section => isTabVisible(section.visibilityKey));
+    // Map to have a 'key' property for getOrderedTabs
+    const withKey = visible.map(s => ({ ...s, key: s.visibilityKey }));
+    const ordered = getOrderedTabs(withKey);
+    return ordered;
+  }, [sectionConfig, isTabVisible, getOrderedTabs]);
   
   const [activeSection, setActiveSection] = useState<ScriptStep>(visibleSections[0]?.id || "greeting");
 
@@ -258,7 +264,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     };
   };
 
-  if (loading || visibilityLoading) {
+  if (loading || visibilityLoading || orderLoading) {
     return (
       <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
         <div className="max-w-5xl mx-auto flex items-center justify-center h-[calc(100vh-200px)]">
