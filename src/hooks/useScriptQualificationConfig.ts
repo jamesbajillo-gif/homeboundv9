@@ -52,7 +52,7 @@ export const useScriptQualificationConfig = () => {
 
   // Fetch master config
   const { data: masterConfig, isLoading: masterLoading } = useQuery({
-    queryKey: ["qualification_master_config", groupType],
+    queryKey: ["qualification_master_config", masterConfigKey],
     queryFn: async (): Promise<QualificationConfig> => {
       try {
         const configData = await mysqlApi.findOneByField<{

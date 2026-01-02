@@ -69,16 +69,16 @@ export const QualificationScriptSelector = ({
   const [pendingSelections, setPendingSelections] = useState<Set<string>>(new Set());
   const storageKey = `${STORAGE_KEY_PREFIX}_${stepName}`;
 
+  // Determine the config key based on stepName
+  const configKey = stepName.includes("outbound")
+    ? "qualification_config_outbound"
+    : "qualification_config_inbound";
+
   // Fetch the master questionnaire config from /settings/forms
   const { data: masterConfig, isLoading: configLoading } = useQuery({
-    queryKey: ["qualification_master_config"],
+    queryKey: ["qualification_master_config", configKey],
     queryFn: async (): Promise<QualificationConfig> => {
       try {
-        // Try outbound config first, then inbound
-        const configKey = stepName.includes("outbound")
-          ? "qualification_config_outbound"
-          : "qualification_config_inbound";
-
         const configData = await mysqlApi.findOneByField<{
           setting_key: string;
           setting_value: string;
