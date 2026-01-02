@@ -26,6 +26,7 @@ export const useListIdTabOrder = (listId: string) => {
       }
     },
     enabled: !!listId,
+    staleTime: 60000, // 1 minute - prevents unnecessary refetches
   });
 
   // Update order

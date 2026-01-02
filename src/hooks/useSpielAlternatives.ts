@@ -53,6 +53,7 @@ export const useSpielAlternatives = (stepName: string) => {
         return [];
       }
     },
+    staleTime: 60000, // 1 minute - prevents unnecessary refetches
   });
 
   // Get alternatives for a specific spiel

@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
@@ -29,8 +29,8 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [formData, setFormData] = useState<Record<string, any> | null>(null);
 
-  // Get all enabled questions across all sections
-  const getAllEnabledQuestions = useCallback((): QualificationQuestion[] => {
+  // Memoize enabled questions to prevent infinite loops
+  const enabledQuestions = useMemo((): QualificationQuestion[] => {
     return config.sections
       .filter(s => s.enabled)
       .flatMap(s => s.questions.filter(q => q.enabled));
@@ -44,12 +44,11 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     return `qualification_form_draft_${listId}_${groupType}`;
   }, [leadData?.list_id, groupType]);
 
-  // Build dynamic schema from questions
-  const buildSchema = useCallback(() => {
+  // Build dynamic schema from questions - memoized
+  const schema = useMemo(() => {
     const schemaFields: Record<string, z.ZodTypeAny> = {};
-    const questions = getAllEnabledQuestions();
 
-    questions.forEach((question) => {
+    enabledQuestions.forEach((question) => {
       const fieldName = question.id;
       
       if (question.inputType === 'email') {
@@ -68,17 +67,21 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     });
 
     return z.object(schemaFields);
-  }, [getAllEnabledQuestions]);
+  }, [enabledQuestions]);
 
-  const schema = buildSchema();
   type FormData = z.infer<typeof schema>;
+
+  // Memoize default values
+  const defaultValues = useMemo(() => {
+    return enabledQuestions.reduce((acc, question) => {
+      acc[question.id] = '';
+      return acc;
+    }, {} as Record<string, any>);
+  }, [enabledQuestions]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: getAllEnabledQuestions().reduce((acc, question) => {
-      acc[question.id] = '';
-      return acc;
-    }, {} as Record<string, any>),
+    defaultValues,
   });
 
   // Debounce ref for API saves
@@ -86,6 +89,7 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
   const pendingDataRef = useRef<Record<string, any> | null>(null);
   const lastSavedRef = useRef<string>("");
   const isResettingRef = useRef(false);
+  const configVersionRef = useRef<string>("");
 
   // Auto-save to API with debouncing (5 second delay to prevent API overload)
   const saveDraft = useCallback(async (data: Record<string, any>) => {
@@ -195,10 +199,17 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     return 'Test value';
   };
 
-  // Update form defaults when config changes
+  // Update form defaults when config changes - with version tracking to prevent loops
   useEffect(() => {
-    const questions = getAllEnabledQuestions();
-    const defaults = questions.reduce((acc, question) => {
+    const configVersion = JSON.stringify(enabledQuestions.map(q => q.id));
+    
+    // Skip if config hasn't actually changed
+    if (configVersion === configVersionRef.current && !testMode) return;
+    configVersionRef.current = configVersion;
+    
+    isResettingRef.current = true;
+    
+    const defaults = enabledQuestions.reduce((acc, question) => {
       if (testMode && question.isRequired) {
         acc[question.id] = getTestValue(question);
       } else {
@@ -208,7 +219,12 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     }, {} as Record<string, any>);
 
     form.reset(defaults);
-  }, [config, testMode, getAllEnabledQuestions]);
+    
+    // Use setTimeout to ensure reset completes before allowing saves
+    setTimeout(() => {
+      isResettingRef.current = false;
+    }, 100);
+  }, [enabledQuestions, testMode, form]);
 
   const handleVerifyAndSubmit = () => {
     form.trigger().then((isValid) => {
@@ -222,7 +238,7 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
 
   const handleConfirmSubmit = async () => {
     const data = form.getValues();
-    const questions = getAllEnabledQuestions();
+    const questions = enabledQuestions;
 
     // Build Zapier payload
     const zapierPayload: Record<string, any> = {
