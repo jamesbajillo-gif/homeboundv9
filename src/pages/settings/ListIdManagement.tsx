@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, ListOrdered, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ListIdConfiguration } from "@/components/settings/ListIdConfiguration";
-import { ListIdScriptEditor } from "@/components/settings/ListIdScriptEditor";
+import { SpielListEditor } from "@/components/settings/SpielListEditor";
+import { ObjectionListEditor } from "@/components/settings/ObjectionListEditor";
 import { ListIdQualificationSelector } from "@/components/settings/ListIdQualificationSelector";
 import { AddTabDialog } from "@/components/settings/AddTabDialog";
 import { SortableTab } from "@/components/settings/SortableTab";
@@ -231,12 +232,12 @@ const ListIdManagement = () => {
                     <ScrollBar orientation="horizontal" />
                   </ScrollArea>
 
-                  {/* Fixed tab contents */}
+                  {/* Fixed tab contents - using same editors as Inbound/Outbound */}
                   <TabsContent value="greeting" className="mt-6">
-                    <ListIdScriptEditor
-                      listId={selectedListId}
+                    <SpielListEditor
                       stepName="greeting"
                       stepTitle="Opening Greeting"
+                      listId={selectedListId}
                     />
                   </TabsContent>
 
@@ -247,36 +248,36 @@ const ListIdManagement = () => {
                   </TabsContent>
 
                   <TabsContent value="objectionHandling" className="mt-6">
-                    <ListIdScriptEditor
-                      listId={selectedListId}
+                    <ObjectionListEditor
                       stepName="objectionHandling"
                       stepTitle="Common Objections"
+                      listId={selectedListId}
                     />
                   </TabsContent>
 
                   <TabsContent value="closingNotInterested" className="mt-6">
-                    <ListIdScriptEditor
-                      listId={selectedListId}
+                    <SpielListEditor
                       stepName="closingNotInterested"
                       stepTitle="Closing - Not Interested"
+                      listId={selectedListId}
                     />
                   </TabsContent>
 
                   <TabsContent value="closingSuccess" className="mt-6">
-                    <ListIdScriptEditor
-                      listId={selectedListId}
+                    <SpielListEditor
                       stepName="closingSuccess"
                       stepTitle="Closing - Successful"
+                      listId={selectedListId}
                     />
                   </TabsContent>
 
-                  {/* Custom tab contents */}
+                  {/* Custom tab contents - using same SpielListEditor */}
                   {customTabs.map((tab) => (
                     <TabsContent key={tab.tab_key} value={tab.tab_key} className="mt-6">
-                      <ListIdScriptEditor
-                        listId={selectedListId}
+                      <SpielListEditor
                         stepName={tab.tab_key}
                         stepTitle={tab.tab_title}
+                        listId={selectedListId}
                       />
                     </TabsContent>
                   ))}
