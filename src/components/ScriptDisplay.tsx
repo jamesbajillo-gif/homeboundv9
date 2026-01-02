@@ -5,7 +5,7 @@ import { ObjectionDisplay } from "@/components/ObjectionDisplay";
 import { SpielDisplay } from "@/components/SpielDisplay";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle } from "lucide-react";
+import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
@@ -16,33 +16,44 @@ import { Separator } from "@/components/ui/separator";
 import { ScriptNavigation } from "./ScriptNavigation";
 import { useTabVisibility } from "@/hooks/useTabVisibility";
 import { useTabOrder } from "@/hooks/useTabOrder";
+import { useCustomTabs } from "@/hooks/useCustomTabs";
 
 type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
+
+interface SectionConfig {
+  id: string;
+  visibilityKey: string;
+  title: string;
+  icon: typeof Phone;
+  color: string;
+  isCustom?: boolean;
+  stepName?: string;
+}
 
 interface ScriptDisplayProps {
   onQualificationSubmitRef?: (submitFn: () => void) => void;
 }
 
 // Define the order and metadata for each section with visibility keys
-const SECTION_CONFIG: { id: ScriptStep; visibilityKey: string; title: string; icon: typeof Phone; color: string }[] = [
-  { id: "greeting", visibilityKey: "inbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500" },
-  { id: "qualification", visibilityKey: "inbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500" },
-  { id: "objectionHandling", visibilityKey: "inbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500" },
-  { id: "closingNotInterested", visibilityKey: "inbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500" },
-  { id: "closingSuccess", visibilityKey: "inbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500" },
+const INBOUND_FIXED_SECTIONS: SectionConfig[] = [
+  { id: "greeting", visibilityKey: "inbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500", stepName: "greeting" },
+  { id: "qualification", visibilityKey: "inbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500", stepName: "inbound_qualification" },
+  { id: "objectionHandling", visibilityKey: "inbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500", stepName: "objectionHandling" },
+  { id: "closingNotInterested", visibilityKey: "inbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500", stepName: "closingNotInterested" },
+  { id: "closingSuccess", visibilityKey: "inbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500", stepName: "closingSuccess" },
 ];
 
 // Outbound section config with different visibility keys
-const OUTBOUND_SECTION_CONFIG: { id: ScriptStep; visibilityKey: string; title: string; icon: typeof Phone; color: string }[] = [
-  { id: "greeting", visibilityKey: "outbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500" },
-  { id: "qualification", visibilityKey: "outbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500" },
-  { id: "objectionHandling", visibilityKey: "outbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500" },
-  { id: "closingNotInterested", visibilityKey: "outbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500" },
-  { id: "closingSuccess", visibilityKey: "outbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500" },
+const OUTBOUND_FIXED_SECTIONS: SectionConfig[] = [
+  { id: "greeting", visibilityKey: "outbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500", stepName: "outbound_greeting" },
+  { id: "qualification", visibilityKey: "outbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500", stepName: "outbound_qualification" },
+  { id: "objectionHandling", visibilityKey: "outbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500", stepName: "outbound_objection" },
+  { id: "closingNotInterested", visibilityKey: "outbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500", stepName: "outbound_closingNotInterested" },
+  { id: "closingSuccess", visibilityKey: "outbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500", stepName: "outbound_closingSuccess" },
 ];
 
 export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) => {
-  const [scriptData, setScriptData] = useState<Record<ScriptStep, { title: string; content: string }> | null>(null);
+  const [scriptData, setScriptData] = useState<Record<string, { title: string; content: string }> | null>(null);
   const [usingListIdScripts, setUsingListIdScripts] = useState(false);
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [activeListName, setActiveListName] = useState<string | null>(null);
@@ -51,23 +62,40 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const { leadData } = useVICI();
   const viciListId = leadData?.list_id;
   
-  // Get visibility and order settings based on group type
+  // Get visibility, order, and custom tabs based on group type
   const { isTabVisible, isLoading: visibilityLoading } = useTabVisibility(groupType);
   const { getOrderedTabs, isLoading: orderLoading } = useTabOrder(groupType);
+  const { tabs: customTabs, isLoading: customTabsLoading } = useCustomTabs(groupType);
   
-  // Get the section config based on group type
-  const sectionConfig = groupType === "outbound" ? OUTBOUND_SECTION_CONFIG : SECTION_CONFIG;
+  // Get the fixed section config based on group type
+  const fixedSections = groupType === "outbound" ? OUTBOUND_FIXED_SECTIONS : INBOUND_FIXED_SECTIONS;
   
-  // Filter and order sections based on visibility and order settings
+  // Combine fixed and custom sections, then filter by visibility and order
   const visibleSections = useMemo(() => {
-    const visible = sectionConfig.filter(section => isTabVisible(section.visibilityKey));
+    // Map custom tabs to section format
+    const customSections: SectionConfig[] = customTabs.map(tab => ({
+      id: tab.tab_key,
+      visibilityKey: tab.tab_key,
+      title: tab.tab_title,
+      icon: FileText,
+      color: "text-slate-500",
+      isCustom: true,
+      stepName: tab.tab_key,
+    }));
+    
+    // Combine all sections
+    const allSections = [...fixedSections, ...customSections];
+    
+    // Filter by visibility
+    const visible = allSections.filter(section => isTabVisible(section.visibilityKey));
+    
     // Map to have a 'key' property for getOrderedTabs
     const withKey = visible.map(s => ({ ...s, key: s.visibilityKey }));
     const ordered = getOrderedTabs(withKey);
     return ordered;
-  }, [sectionConfig, isTabVisible, getOrderedTabs]);
+  }, [fixedSections, customTabs, isTabVisible, getOrderedTabs]);
   
-  const [activeSection, setActiveSection] = useState<ScriptStep>(visibleSections[0]?.id || "greeting");
+  const [activeSection, setActiveSection] = useState<string>(visibleSections[0]?.id || "greeting");
 
   // Handle navigation to a section (smooth scroll)
   const handleNavigate = useCallback((sectionId: string) => {
@@ -133,13 +161,13 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeSection, handleNavigate, visibleSections]);
 
-  // Fetch scripts using React Query - auto-refreshes when cache is invalidated
+  // Fetch scripts using React Query - auto-refreshes when cache is invalidated or custom tabs change
   const { data: fetchedScriptData, isLoading: loading } = useQuery({
-    queryKey: ['scripts', 'display', groupType, viciListId],
+    queryKey: ['scripts', 'display', groupType, viciListId, customTabs.map(t => t.tab_key).join(',')],
     queryFn: async () => {
       return await fetchScriptDataInternal();
     },
-    enabled: !!groupType,
+    enabled: !!groupType && !customTabsLoading,
     staleTime: 0, // Always refetch to get latest data
   });
 
@@ -165,16 +193,20 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     return requiredSteps.every(step => scripts[step]);
   };
 
-  // Helper: Load default scripts based on group type
+  // Helper: Load default scripts based on group type (including custom tabs)
   const loadDefaultScripts = async () => {
     const prefix = groupType === "outbound" ? "outbound_" : "";
-    const stepMapping: Record<ScriptStep, string> = {
+    const stepMapping: Record<string, string> = {
       greeting: `${prefix}greeting`,
       objectionHandling: `${prefix}${groupType === "outbound" ? "objection" : "objectionHandling"}`,
       qualification: `${prefix}qualification`,
       closingNotInterested: `${prefix}closingNotInterested`,
       closingSuccess: `${prefix}closingSuccess`,
     };
+    
+    // Add custom tab step names to fetch
+    const customStepNames = customTabs.map(tab => tab.tab_key);
+    const allStepNames = [...Object.values(stepMapping), ...customStepNames];
 
     const defaultData = await mysqlApi.findByFieldIn<{
       step_name: string;
@@ -183,20 +215,31 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     }>(
       "homebound_script",
       "step_name",
-      Object.values(stepMapping)
+      allStepNames
     );
 
-    return defaultData.reduce((acc, item) => {
+    const result: Record<string, { title: string; content: string }> = {};
+    
+    // Map fixed tabs
+    defaultData.forEach(item => {
       const stepEntry = Object.entries(stepMapping).find(([_, dbName]) => dbName === item.step_name);
       if (stepEntry) {
         const [stepKey] = stepEntry;
-        acc[stepKey as ScriptStep] = {
+        result[stepKey] = {
           title: item.title,
           content: item.content,
         };
       }
-      return acc;
-    }, {} as Record<ScriptStep, { title: string; content: string }>);
+      // Also map custom tabs by their tab_key
+      if (customStepNames.includes(item.step_name)) {
+        result[item.step_name] = {
+          title: item.title,
+          content: item.content,
+        };
+      }
+    });
+    
+    return result;
   };
 
   const fetchScriptDataInternal = async () => {
@@ -264,7 +307,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     };
   };
 
-  if (loading || visibilityLoading || orderLoading) {
+  if (loading || visibilityLoading || orderLoading || customTabsLoading) {
     return (
       <div className="px-2 sm:px-4 md:px-6 lg:px-8 pb-4">
         <div className="max-w-5xl mx-auto flex items-center justify-center h-[calc(100vh-200px)]">
@@ -363,27 +406,33 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
                       </>
                     ) : section.id === "objectionHandling" ? (
                       <ObjectionDisplay 
-                        content={sectionData.content} 
+                        content={sectionData?.content || ""} 
                         stepName={groupType === "outbound" ? "outbound_objection" : "objection"}
                         accentColor="border-amber-500" 
                       />
                     ) : section.id === "greeting" ? (
                       <SpielDisplay 
-                        content={sectionData.content} 
-                        stepName="greeting"
+                        content={sectionData?.content || ""} 
+                        stepName={section.stepName || "greeting"}
                         accentColor="border-blue-500" 
                       />
                     ) : section.id === "closingNotInterested" ? (
                       <SpielDisplay 
-                        content={sectionData.content} 
-                        stepName="closingNotInterested"
+                        content={sectionData?.content || ""} 
+                        stepName={section.stepName || "closingNotInterested"}
                         accentColor="border-red-500" 
                       />
                     ) : section.id === "closingSuccess" ? (
                       <SpielDisplay 
-                        content={sectionData.content} 
-                        stepName="closingSuccess"
+                        content={sectionData?.content || ""} 
+                        stepName={section.stepName || "closingSuccess"}
                         accentColor="border-green-500" 
+                      />
+                    ) : section.isCustom ? (
+                      <SpielDisplay 
+                        content={sectionData?.content || ""} 
+                        stepName={section.stepName || section.id}
+                        accentColor="border-slate-500" 
                       />
                     ) : (
                       <div className="prose prose-sm md:prose-base max-w-none">
