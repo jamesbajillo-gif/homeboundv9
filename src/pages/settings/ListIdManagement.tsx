@@ -11,7 +11,8 @@ import { ListIdQualificationSelector } from "@/components/settings/ListIdQualifi
 import { AddTabDialog } from "@/components/settings/AddTabDialog";
 import { SortableTab } from "@/components/settings/SortableTab";
 import { CopyFromGroupDialog } from "@/components/settings/CopyFromGroupDialog";
-import { useListIdTabSettings } from "@/hooks/useListIdTabSettings";
+import { useListIdTabVisibility } from "@/hooks/useListIdTabVisibility";
+import { useListIdTabOrder } from "@/hooks/useListIdTabOrder";
 import { useListIdCustomTabs } from "@/hooks/useListIdCustomTabs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -48,14 +49,9 @@ const ListIdManagement = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ key: string; title: string } | null>(null);
 
   // Hooks for tab management (only active when listId is selected)
-  const { 
-    isTabVisible, 
-    setTabVisibility, 
-    setTabOrder, 
-    getOrderedTabs, 
-    isLoading: settingsLoading,
-    isUpdating: isVisibilityUpdating 
-  } = useListIdTabSettings(selectedListId);
+  // Uses same pattern as Inbound/Outbound with separate visibility and order hooks
+  const { isTabVisible, setTabVisibility, isLoading: visibilityLoading, isUpdating: isVisibilityUpdating } = useListIdTabVisibility(selectedListId);
+  const { setTabOrder, getOrderedTabs, isLoading: orderLoading } = useListIdTabOrder(selectedListId);
   
   const { 
     tabs: customTabs, 
@@ -143,7 +139,7 @@ const ListIdManagement = () => {
   };
 
   const defaultTab = allTabs[0]?.key || "greeting";
-  const isTabsLoading = settingsLoading || customTabsLoading;
+  const isTabsLoading = visibilityLoading || orderLoading || customTabsLoading;
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -165,7 +161,8 @@ const ListIdManagement = () => {
                 listId={selectedListId} 
                 onCopyComplete={() => {
                   queryClient.invalidateQueries({ queryKey: ["list-script", selectedListId] });
-                  queryClient.invalidateQueries({ queryKey: ["listid_tab_settings", selectedListId] });
+                  queryClient.invalidateQueries({ queryKey: ["listid_tab_visibility", selectedListId] });
+                  queryClient.invalidateQueries({ queryKey: ["listid_tab_order", selectedListId] });
                   queryClient.invalidateQueries({ queryKey: ["listid_custom_tabs", selectedListId] });
                 }}
               />
