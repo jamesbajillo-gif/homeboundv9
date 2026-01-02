@@ -128,6 +128,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   });
 
   // Parse content into flat list items
+  // IMPORTANT: Use 'objection_X' format to match ObjectionDisplay in agent interface
   const parseToItems = (content: string, alts: ObjectionAlternative[]): ListItem[] => {
     const result: ListItem[] = [];
     
@@ -144,10 +145,10 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
             ? `**${currentTitle}** ${responseLines.join(' ').trim()}`
             : responseLines.join(' ').trim();
           result.push({
-            id: `obj_${objIndex}`,
+            id: `objection_${objIndex}`,
             text,
             type: 'objection',
-            objectionId: `obj_${objIndex}`,
+            objectionId: `objection_${objIndex}`,
           });
           objIndex++;
         }
@@ -170,10 +171,10 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       // Fallback for legacy content
       if (result.length === 0 && content.trim()) {
         result.push({
-          id: 'obj_0',
+          id: 'objection_0',
           text: content.trim(),
           type: 'objection',
-          objectionId: 'obj_0',
+          objectionId: 'objection_0',
         });
       }
     }
@@ -312,11 +313,13 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
         is_default: 0,
       });
     } else {
+      // Create new objection with consistent ID format
+      const nextId = items.filter(i => i.type === 'objection').length;
       setItems(prev => [...prev, {
-        id: `obj_${Date.now()}`,
+        id: `objection_${nextId}`,
         text: newText.trim(),
         type: 'objection',
-        objectionId: `obj_${Date.now()}`,
+        objectionId: `objection_${nextId}`,
       }]);
     }
     
