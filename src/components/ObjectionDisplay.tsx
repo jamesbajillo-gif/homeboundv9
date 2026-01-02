@@ -327,9 +327,9 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
               </Button>
             </div>
           ) : (
-            <p className="text-foreground text-sm sm:text-base leading-relaxed">
+            <pre className="whitespace-pre-wrap font-sans text-foreground text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose">
               {displayText}
-            </p>
+            </pre>
           )}
         </div>
       </div>
