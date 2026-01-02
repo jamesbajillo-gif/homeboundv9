@@ -20,11 +20,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Copy, Loader2 } from "lucide-react";
 import { mysqlApi } from "@/lib/mysqlApi";
-import { getAppSetting } from "@/lib/migration";
+import { getAppSetting, setAppSetting } from "@/lib/migration";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListIdTabSettings } from "@/hooks/useListIdTabSettings";
-import { useListIdCustomTabs } from "@/hooks/useListIdCustomTabs";
 
 interface CopyFromGroupDialogProps {
   listId: string;
@@ -54,8 +52,6 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
   const [isCopying, setIsCopying] = useState(false);
   
   const queryClient = useQueryClient();
-  const { settings, isLoading: settingsLoading } = useListIdTabSettings(listId);
-  const { createTab } = useListIdCustomTabs(listId);
 
   const handleCopy = async () => {
     if (!listId) return;
@@ -155,32 +151,32 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
         }
       }
 
-      // 3. Copy visibility and order settings
+      // 3. Copy visibility and order settings (using same format as inbound/outbound)
       if (copySettings) {
         try {
-          // Get source visibility
+          // Get source visibility and order (separate settings like inbound/outbound)
           const visibilityData = await getAppSetting(`tab_visibility_${sourceGroup}`);
           const orderData = await getAppSetting(`tab_order_${sourceGroup}`);
           
-          const visibility = visibilityData ? JSON.parse(visibilityData) : {};
-          const order = orderData ? JSON.parse(orderData) : [];
-
-          // Save to list ID settings
-          const newSettings = {
-            visibility: { ...visibility },
-            order: [...order],
-          };
-
-          await mysqlApi.upsertByFields(
-            "homebound_app_settings",
-            {
-              key_name: `listid_tabs_${listId}`,
-              value: JSON.stringify(newSettings),
-              type: "json",
-              description: `Tab settings for List ID ${listId} (copied from ${sourceGroup})`,
-            },
-            "key_name"
-          );
+          // Save visibility to list ID settings (separate key like inbound/outbound)
+          if (visibilityData) {
+            await setAppSetting(
+              `listid_tab_visibility_${listId}`,
+              visibilityData,
+              "json",
+              `Tab visibility settings for List ID ${listId} (copied from ${sourceGroup})`
+            );
+          }
+          
+          // Save order to list ID settings (separate key like inbound/outbound)
+          if (orderData) {
+            await setAppSetting(
+              `listid_tab_order_${listId}`,
+              orderData,
+              "json",
+              `Tab order settings for List ID ${listId} (copied from ${sourceGroup})`
+            );
+          }
         } catch (error) {
           console.warn("Failed to copy settings:", error);
         }
@@ -188,7 +184,8 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
 
       // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ["list-script", listId] });
-      queryClient.invalidateQueries({ queryKey: ["listid_tab_settings", listId] });
+      queryClient.invalidateQueries({ queryKey: ["listid_tab_visibility", listId] });
+      queryClient.invalidateQueries({ queryKey: ["listid_tab_order", listId] });
       queryClient.invalidateQueries({ queryKey: ["listid_custom_tabs", listId] });
       
       toast.success(`Settings copied from ${sourceGroup}!`);
