@@ -191,12 +191,11 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
     toast.success("Alternative added");
   }, [newAltText, currentItem, addAlternative]);
 
-  if (objections.length === 0) {
+  // Empty state: no objections parsed and no alternatives
+  if (objections.length === 0 && unifiedList.length === 0) {
     return (
       <div className="prose prose-sm md:prose-base max-w-none">
-        <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-          {replaceScriptVariables(content, leadData)}
-        </pre>
+        <p className="text-muted-foreground italic">No objection handling content configured. Add content in Settings.</p>
       </div>
     );
   }
