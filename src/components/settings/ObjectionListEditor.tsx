@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, Loader2, Check, X, Pencil } from "lucide-react";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { toast } from "sonner";
@@ -59,11 +59,6 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const [newText, setNewText] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ListItem | null>(null);
 
-  // Derive script name for alternatives
-  const altScriptName = stepName === "outbound_objection" 
-    ? "outbound_objection" 
-    : "inbound_objection";
-
   // Fetch script using React Query
   const { data: section, isLoading } = useQuery({
     queryKey: QUERY_KEYS.scripts.byStep(stepName),
@@ -80,13 +75,13 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
 
   // Fetch alternatives
   const { data: alternatives = [], isLoading: altsLoading } = useQuery({
-    queryKey: [QUERY_KEYS.scripts.all, "objection_alts", altScriptName],
+    queryKey: [QUERY_KEYS.scripts.all, "objection_alts", stepName],
     queryFn: async (): Promise<ObjectionAlternative[]> => {
       try {
         const data = await mysqlApi.findByField<ObjectionAlternative>(
           ALTS_TABLE,
           "script_name",
-          altScriptName,
+          stepName,
           { orderBy: "alt_order", order: "ASC" }
         );
         return data;
@@ -109,7 +104,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", altScriptName] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", stepName] });
     },
   });
 
@@ -117,66 +112,28 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const deleteAltMutation = useMutation({
     mutationFn: async ({ objectionId, altOrder }: { objectionId: string; altOrder: number }) => {
       await mysqlApi.deleteByWhere(ALTS_TABLE, {
-        script_name: altScriptName,
+        script_name: stepName,
         objection_id: objectionId,
         alt_order: altOrder,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", altScriptName] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "objection_alts", stepName] });
     },
   });
 
-  // Parse content into flat list items
-  // IMPORTANT: Use 'objection_X' format to match ObjectionDisplay in agent interface
+  // Parse content into flat list items (simplified - single objection_0 like SpielListEditor)
   const parseToItems = (content: string, alts: ObjectionAlternative[]): ListItem[] => {
     const result: ListItem[] = [];
     
-    // Parse objections from content
+    // The base objection is the original content (same pattern as SpielListEditor)
     if (content && content.trim()) {
-      const lines = content.split('\n');
-      let currentTitle = '';
-      let responseLines: string[] = [];
-      let objIndex = 0;
-
-      const pushObjection = () => {
-        if (currentTitle || responseLines.length > 0) {
-          const text = currentTitle 
-            ? `**${currentTitle}** ${responseLines.join(' ').trim()}`
-            : responseLines.join(' ').trim();
-          result.push({
-            id: `objection_${objIndex}`,
-            text,
-            type: 'objection',
-            objectionId: `objection_${objIndex}`,
-          });
-          objIndex++;
-        }
-      };
-
-      lines.forEach((line) => {
-        const trimmed = line.trim();
-        const boldMatch = trimmed.match(/^\*\*(.+?)\*\*$/);
-        
-        if (boldMatch) {
-          pushObjection();
-          currentTitle = boldMatch[1];
-          responseLines = [];
-        } else if (trimmed) {
-          responseLines.push(trimmed);
-        }
+      result.push({
+        id: 'objection_0',
+        text: content.trim(),
+        type: 'objection',
+        objectionId: 'objection_0',
       });
-      pushObjection();
-
-      // Fallback for legacy content
-      if (result.length === 0 && content.trim()) {
-        result.push({
-          id: 'objection_0',
-          text: content.trim(),
-          type: 'objection',
-          objectionId: 'objection_0',
-        });
-      }
     }
 
     // Add alternatives to the list
@@ -202,16 +159,9 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Extract objections and convert back to content format
-      const objectionItems = items.filter(i => i.type === 'objection');
-      const content = objectionItems.map(item => {
-        // Parse **title** from text if present
-        const match = item.text.match(/^\*\*(.+?)\*\*\s*(.*)$/);
-        if (match) {
-          return `**${match[1]}**\n${match[2]}`;
-        }
-        return `**Objection**\n${item.text}`;
-      }).join('\n\n');
+      // Extract the base objection (first item that's type 'objection')
+      const objectionItem = items.find(i => i.type === 'objection');
+      const content = objectionItem?.text || '';
       
       const existingData = await mysqlApi.findOneByField<ScriptSection>(
         "homebound_script",
@@ -259,7 +209,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
 
     if (item.type === 'alternative' && item.objectionId && item.altOrder !== undefined) {
       await saveAltMutation.mutateAsync({
-        script_name: altScriptName,
+        script_name: stepName,
         objection_id: item.objectionId,
         alt_text: editText.trim(),
         alt_order: item.altOrder,
@@ -288,9 +238,6 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
         altOrder: deleteTarget.altOrder,
       });
       toast.success("Alternative deleted");
-    } else {
-      setItems(prev => prev.filter(i => i.id !== deleteTarget.id));
-      toast.success("Objection deleted");
     }
     setDeleteTarget(null);
   };
@@ -298,28 +245,28 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const handleAdd = async () => {
     if (!newText.trim()) return;
     
-    // Add as alternative to first objection or create new objection
-    const firstObjection = items.find(i => i.type === 'objection');
+    // Find the base objection to add alternative to
+    const baseObjection = items.find(i => i.type === 'objection');
     
-    if (firstObjection) {
-      const existingAlts = alternatives.filter(a => a.objection_id === firstObjection.objectionId);
+    if (baseObjection) {
+      // Add as alternative to base objection
+      const existingAlts = alternatives.filter(a => a.objection_id === baseObjection.objectionId);
       const nextOrder = existingAlts.length > 0 ? Math.max(...existingAlts.map(a => a.alt_order)) + 1 : 1;
       
       await saveAltMutation.mutateAsync({
-        script_name: altScriptName,
-        objection_id: firstObjection.objectionId!,
+        script_name: stepName,
+        objection_id: baseObjection.objectionId!,
         alt_text: newText.trim(),
         alt_order: nextOrder,
         is_default: 0,
       });
     } else {
-      // Create new objection with consistent ID format
-      const nextId = items.filter(i => i.type === 'objection').length;
+      // No base objection exists, create it
       setItems(prev => [...prev, {
-        id: `objection_${nextId}`,
+        id: 'objection_0',
         text: newText.trim(),
         type: 'objection',
-        objectionId: `objection_${nextId}`,
+        objectionId: 'objection_0',
       }]);
     }
     
@@ -359,20 +306,21 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       {/* Add new item form */}
       {isAdding && (
         <div className="flex gap-2 mb-3">
-          <Input
+          <Textarea
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
             placeholder="Enter objection response..."
-            className="flex-1"
+            className="flex-1 min-h-[80px]"
             autoFocus
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           />
-          <Button size="icon" variant="ghost" onClick={() => setIsAdding(false)}>
-            <X className="h-4 w-4" />
-          </Button>
-          <Button size="icon" onClick={handleAdd} disabled={!newText.trim()}>
-            <Check className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Button size="icon" variant="ghost" onClick={() => setIsAdding(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+            <Button size="icon" onClick={handleAdd} disabled={!newText.trim()}>
+              <Check className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -394,29 +342,30 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
                 <span className="text-sm font-medium text-muted-foreground shrink-0 mt-2">
                   #{index + 1}
                 </span>
-                <Input
+                <Textarea
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  className="flex-1 text-sm"
+                  className="flex-1 text-sm min-h-[80px]"
                   autoFocus
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveEdit(item);
                     if (e.key === 'Escape') setEditingId(null);
                   }}
                 />
-                <Button size="icon" variant="ghost" onClick={() => setEditingId(null)}>
-                  <X className="h-4 w-4" />
-                </Button>
-                <Button size="icon" onClick={() => handleSaveEdit(item)}>
-                  <Check className="h-4 w-4" />
-                </Button>
+                <div className="flex flex-col gap-1">
+                  <Button size="icon" variant="ghost" onClick={() => setEditingId(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" onClick={() => handleSaveEdit(item)}>
+                    <Check className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ) : (
               <>
                 <span className="text-sm font-medium text-muted-foreground shrink-0">
                   #{index + 1}
                 </span>
-                <p className="flex-1 text-sm">{item.text}</p>
+                <pre className="flex-1 text-sm whitespace-pre-wrap font-sans">{item.text}</pre>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button
                     size="icon"
@@ -426,14 +375,16 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 text-destructive"
-                    onClick={() => handleDeleteClick(item)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {item.type === 'alternative' && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-destructive"
+                      onClick={() => handleDeleteClick(item)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               </>
             )}
@@ -445,11 +396,9 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete this {deleteTarget?.type === 'alternative' ? 'alternative' : 'objection'}?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete this alternative?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. The {deleteTarget?.type === 'alternative' ? 'alternative response' : 'objection'} will be permanently deleted.
+              This action cannot be undone. The alternative response will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
