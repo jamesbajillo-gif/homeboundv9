@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ScriptEditor } from "@/components/settings/ScriptEditor";
 import { QualificationScriptSelector } from "@/components/settings/QualificationScriptSelector";
+import { ObjectionListEditor } from "@/components/settings/ObjectionListEditor";
 
 const OutboundScripts = () => {
   const navigate = useNavigate();
@@ -48,7 +49,7 @@ const OutboundScripts = () => {
               </TabsContent>
 
               <TabsContent value="objection" className="mt-6">
-                <ScriptEditor stepName="outbound_objection" stepTitle="Common Objections" />
+                <ObjectionListEditor stepName="outbound_objection" stepTitle="Common Objections" />
               </TabsContent>
 
               <TabsContent value="closingNotInterested" className="mt-6">
