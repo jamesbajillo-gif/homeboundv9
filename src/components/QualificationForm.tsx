@@ -84,15 +84,24 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
   // Debounce ref for API saves
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDataRef = useRef<Record<string, any> | null>(null);
+  const lastSavedRef = useRef<string>("");
+  const isResettingRef = useRef(false);
 
   // Auto-save to API with debouncing (5 second delay to prevent API overload)
   const saveDraft = useCallback(async (data: Record<string, any>) => {
+    // Skip if we're in the middle of a form reset
+    if (isResettingRef.current) return;
+    
     const draftKey = getDraftKey();
     const draftData = JSON.stringify(data);
+    
+    // Skip if data hasn't changed
+    if (draftData === lastSavedRef.current) return;
 
     // Always save to localStorage immediately (it's local and fast)
     try {
       localStorage.setItem(draftKey, draftData);
+      lastSavedRef.current = draftData;
     } catch (error) {
       console.error('Error saving draft to localStorage:', error);
     }
@@ -129,14 +138,17 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
   useEffect(() => {
     const loadDraft = async () => {
       const draftKey = getDraftKey();
+      isResettingRef.current = true;
 
       try {
         const apiDraft = await getAppSetting(draftKey);
         if (apiDraft) {
           const draft = JSON.parse(apiDraft);
           if (Object.keys(draft).length > 0) {
+            lastSavedRef.current = JSON.stringify(draft);
             form.reset(draft);
             toast.info('Draft restored');
+            isResettingRef.current = false;
             return;
           }
         }
@@ -149,6 +161,7 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
         if (savedDraft) {
           const draft = JSON.parse(savedDraft);
           if (Object.keys(draft).length > 0) {
+            lastSavedRef.current = savedDraft;
             form.reset(draft);
             toast.info('Draft restored');
           }
@@ -156,6 +169,8 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
       } catch (error) {
         console.error('Error loading draft from localStorage:', error);
       }
+      
+      isResettingRef.current = false;
     };
 
     loadDraft();

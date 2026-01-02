@@ -35,11 +35,13 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
           { orderBy: "display_order", order: "ASC" }
         );
         return data.filter(tab => tab.is_active === 1);
-      } catch (error) {
-        console.error("Error loading custom tabs:", error);
+      } catch (error: any) {
+        // Table might not exist yet - return empty array
+        console.warn("Custom tabs table may not exist yet:", error.message);
         return [];
       }
     },
+    retry: false, // Don't retry if table doesn't exist
   });
 
   // Create a new tab
