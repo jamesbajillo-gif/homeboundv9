@@ -168,7 +168,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
       return await fetchScriptDataInternal();
     },
     enabled: !!groupType && !customTabsLoading,
-    staleTime: 0, // Always refetch to get latest data
+    staleTime: 30000, // 30 seconds - prevents unnecessary refetches
   });
 
   // Update local state when React Query data changes

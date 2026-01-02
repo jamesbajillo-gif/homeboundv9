@@ -42,6 +42,7 @@ export const useListIdCustomTabs = (listId: string) => {
     },
     enabled: !!listId,
     retry: false,
+    staleTime: 60000, // 1 minute - prevents unnecessary refetches
   });
 
   // Create a new tab

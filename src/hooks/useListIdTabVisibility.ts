@@ -30,6 +30,7 @@ export const useListIdTabVisibility = (listId: string) => {
       }
     },
     enabled: !!listId,
+    staleTime: 60000, // 1 minute - prevents unnecessary refetches
   });
 
   // Update visibility for a tab

@@ -70,6 +70,7 @@ export const useScriptQualificationConfig = () => {
         return DEFAULT_QUALIFICATION_CONFIG;
       }
     },
+    staleTime: 30000, // 30 seconds - prevents unnecessary refetches
   });
 
   // Fetch script-specific selections
@@ -91,6 +92,7 @@ export const useScriptQualificationConfig = () => {
         return [];
       }
     },
+    staleTime: 30000, // 30 seconds - prevents unnecessary refetches
   });
 
   // Fetch script-specific alternatives from dedicated table
@@ -110,6 +112,7 @@ export const useScriptQualificationConfig = () => {
         return [];
       }
     },
+    staleTime: 30000, // 30 seconds - prevents unnecessary refetches
   });
 
   // Build the merged config for display
