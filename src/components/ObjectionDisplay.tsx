@@ -240,7 +240,7 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
               key={objection.id} 
               className="border-l-2 border-amber-500/50 pl-4 py-2 group"
             >
-              {/* Objection Title */}
+              {/* Objection Title with Action Buttons */}
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="font-semibold text-foreground">{objection.title}</h4>
                 {hasAlternatives && (
@@ -253,6 +253,84 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
                     {scriptName.replace('_objection', '')}
                   </Badge>
                 )}
+                
+                {/* Action buttons - always visible next to title */}
+                <div className="flex items-center gap-0.5 ml-auto">
+                  {/* Cycle button */}
+                  {hasAlternatives && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => handleCycle(objection.id)}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Cycle alternatives ({currentIndex + 1}/{totalCount})</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  
+                  {/* Edit button */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => handleStartEdit(objection.id, text)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{source === 'original' ? 'Create alternative' : 'Edit alternative'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  
+                  {/* Add button */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => {
+                          setAddingToId(objection.id);
+                          setNewAltText("");
+                        }}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Add alternative</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  
+                  {/* Delete button - only for alternatives */}
+                  {source === 'alt' && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive"
+                          onClick={() => handleDeleteAlternative(objection)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Delete this alternative</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
 
               {/* Response Text */}
@@ -286,89 +364,9 @@ export const ObjectionDisplay = ({ content }: ObjectionDisplayProps) => {
                   </Button>
                 </div>
               ) : (
-                <div className="relative">
-                  <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed text-foreground pr-24">
-                    {text}
-                  </pre>
-                  
-                  {/* Action buttons - visible on hover */}
-                  <div className="absolute top-0 right-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {/* Cycle button */}
-                    {hasAlternatives && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
-                            onClick={() => handleCycle(objection.id)}
-                          >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Cycle alternatives ({currentIndex + 1}/{totalCount})</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    
-                    {/* Edit button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => handleStartEdit(objection.id, text)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{source === 'original' ? 'Create alternative' : 'Edit alternative'}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    
-                    {/* Add button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => {
-                            setAddingToId(objection.id);
-                            setNewAltText("");
-                          }}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Add alternative</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    
-                    {/* Delete button - only for alternatives */}
-                    {source === 'alt' && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-destructive"
-                            onClick={() => handleDeleteAlternative(objection)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Delete this alternative</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
+                <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed text-foreground">
+                  {text}
+                </pre>
               )}
 
               {/* Add new alternative input */}
