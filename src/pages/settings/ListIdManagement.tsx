@@ -10,8 +10,10 @@ import { ListIdScriptEditor } from "@/components/settings/ListIdScriptEditor";
 import { ListIdQualificationSelector } from "@/components/settings/ListIdQualificationSelector";
 import { AddTabDialog } from "@/components/settings/AddTabDialog";
 import { SortableTab } from "@/components/settings/SortableTab";
+import { CopyFromGroupDialog } from "@/components/settings/CopyFromGroupDialog";
 import { useListIdTabSettings } from "@/hooks/useListIdTabSettings";
 import { useListIdCustomTabs } from "@/hooks/useListIdCustomTabs";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   closestCenter,
@@ -39,6 +41,7 @@ import {
 
 const ListIdManagement = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [selectedListId, setSelectedListId] = useState<string>("");
   const [editingTab, setEditingTab] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -157,7 +160,17 @@ const ListIdManagement = () => {
             <h1 className="text-3xl font-bold text-foreground">List ID Configuration</h1>
           </div>
           {selectedListId && (
-            <AddTabDialog onAdd={createTab} isCreating={isCreating} />
+            <div className="flex items-center gap-2">
+              <CopyFromGroupDialog 
+                listId={selectedListId} 
+                onCopyComplete={() => {
+                  queryClient.invalidateQueries({ queryKey: ["list-script", selectedListId] });
+                  queryClient.invalidateQueries({ queryKey: ["listid_tab_settings", selectedListId] });
+                  queryClient.invalidateQueries({ queryKey: ["listid_custom_tabs", selectedListId] });
+                }}
+              />
+              <AddTabDialog onAdd={createTab} isCreating={isCreating} />
+            </div>
           )}
         </div>
       </div>
