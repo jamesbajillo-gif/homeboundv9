@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QualificationForm } from "@/components/QualificationForm";
+import { ObjectionDisplay } from "@/components/ObjectionDisplay";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle } from "lucide-react";
@@ -315,6 +316,8 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
                           onSubmitRef={onQualificationSubmitRef}
                         />
                       </>
+                    ) : section.id === "objectionHandling" ? (
+                      <ObjectionDisplay content={sectionData.content} />
                     ) : (
                       <div className="prose prose-sm md:prose-base max-w-none">
                         <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
