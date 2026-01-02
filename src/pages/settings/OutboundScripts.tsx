@@ -9,7 +9,10 @@ import { QualificationScriptSelector } from "@/components/settings/Qualification
 import { ObjectionListEditor } from "@/components/settings/ObjectionListEditor";
 import { AddTabDialog } from "@/components/settings/AddTabDialog";
 import { useCustomTabs } from "@/hooks/useCustomTabs";
+import { useTabVisibility } from "@/hooks/useTabVisibility";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +27,7 @@ import {
 const OutboundScripts = () => {
   const navigate = useNavigate();
   const { tabs, isLoading, createTab, updateTab, deleteTab, isCreating, isDeleting } = useCustomTabs("outbound");
+  const { isTabVisible, setTabVisibility, isUpdating: isVisibilityUpdating } = useTabVisibility("outbound");
   
   const [editingTab, setEditingTab] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -31,11 +35,11 @@ const OutboundScripts = () => {
 
   // Fixed tabs that can't be deleted
   const fixedTabs = [
-    { key: "greeting", title: "Greeting", stepName: "outbound_greeting" },
-    { key: "qualification", title: "Qualification", stepName: "outbound_qualification" },
-    { key: "objection", title: "Objections", stepName: "outbound_objection" },
-    { key: "closingNotInterested", title: "Not Interested", stepName: "outbound_closingNotInterested" },
-    { key: "closingSuccess", title: "Success", stepName: "outbound_closingSuccess" },
+    { key: "outbound_greeting", title: "Greeting", stepName: "outbound_greeting" },
+    { key: "outbound_qualification", title: "Qualification", stepName: "outbound_qualification" },
+    { key: "outbound_objection", title: "Objections", stepName: "outbound_objection" },
+    { key: "outbound_closingNotInterested", title: "Not Interested", stepName: "outbound_closingNotInterested" },
+    { key: "outbound_closingSuccess", title: "Success", stepName: "outbound_closingSuccess" },
   ];
 
   const handleStartEdit = (tabKey: string, currentTitle: string, e: React.MouseEvent) => {
@@ -92,16 +96,30 @@ const OutboundScripts = () => {
         <ScrollArea className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">
             <div className="max-w-6xl mx-auto">
-              <Tabs defaultValue="greeting" className="w-full">
+              <Tabs defaultValue="outbound_greeting" className="w-full">
                 <ScrollArea className="w-full">
                   <TabsList className={`inline-flex w-auto min-w-full`}>
                     {fixedTabs.map((tab) => (
-                      <TabsTrigger key={tab.key} value={tab.key} className="flex-shrink-0">
+                      <TabsTrigger key={tab.key} value={tab.key} className="flex-shrink-0 gap-2">
+                        <Checkbox
+                          checked={isTabVisible(tab.key)}
+                          onCheckedChange={(checked) => setTabVisibility(tab.key, !!checked)}
+                          onClick={(e) => e.stopPropagation()}
+                          disabled={isVisibilityUpdating}
+                          className="h-3.5 w-3.5"
+                        />
                         {tab.title}
                       </TabsTrigger>
                     ))}
                     {tabs.map((tab) => (
-                      <TabsTrigger key={tab.tab_key} value={tab.tab_key} className="flex-shrink-0 group relative pr-8">
+                      <TabsTrigger key={tab.tab_key} value={tab.tab_key} className="flex-shrink-0 group relative pr-8 gap-2">
+                        <Checkbox
+                          checked={isTabVisible(tab.tab_key)}
+                          onCheckedChange={(checked) => setTabVisibility(tab.tab_key, !!checked)}
+                          onClick={(e) => e.stopPropagation()}
+                          disabled={isVisibilityUpdating}
+                          className="h-3.5 w-3.5"
+                        />
                         {editingTab === tab.tab_key ? (
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <Input
@@ -147,26 +165,26 @@ const OutboundScripts = () => {
                 </ScrollArea>
 
                 {/* Fixed tab contents */}
-                <TabsContent value="greeting" className="mt-6">
+                <TabsContent value="outbound_greeting" className="mt-6">
                   <SpielListEditor stepName="outbound_greeting" stepTitle="Opening Greeting" />
                 </TabsContent>
 
-                <TabsContent value="qualification" className="mt-6">
+                <TabsContent value="outbound_qualification" className="mt-6">
                   <QualificationScriptSelector 
                     stepName="outbound_qualification" 
                     stepTitle="Qualification Questions" 
                   />
                 </TabsContent>
 
-                <TabsContent value="objection" className="mt-6">
+                <TabsContent value="outbound_objection" className="mt-6">
                   <ObjectionListEditor stepName="outbound_objection" stepTitle="Common Objections" />
                 </TabsContent>
 
-                <TabsContent value="closingNotInterested" className="mt-6">
+                <TabsContent value="outbound_closingNotInterested" className="mt-6">
                   <SpielListEditor stepName="outbound_closingNotInterested" stepTitle="Closing - Not Interested" />
                 </TabsContent>
 
-                <TabsContent value="closingSuccess" className="mt-6">
+                <TabsContent value="outbound_closingSuccess" className="mt-6">
                   <SpielListEditor stepName="outbound_closingSuccess" stepTitle="Closing - Success" />
                 </TabsContent>
 
