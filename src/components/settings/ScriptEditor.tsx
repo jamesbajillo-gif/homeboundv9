@@ -596,8 +596,8 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
   }
 
   // Check if this is an objection step
-  const isObjectionStep = stepName.includes("objection");
-  const objectionScriptName = stepName.replace("_objection", "_objection").includes("outbound") 
+  const isObjectionStep = stepName.includes("objection") || stepName === "objectionHandling";
+  const objectionScriptName = stepName === "outbound_objection" 
     ? "outbound_objection" 
     : "inbound_objection";
 
