@@ -54,8 +54,8 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   });
 
   // Parse objections from content
-  const parseObjections = (content: string): Objection[] => {
-    if (!content) return [];
+  const parseObjections = (content: string, showLegacyToast = false): Objection[] => {
+    if (!content || content.trim() === '') return [];
     
     const lines = content.split('\n');
     const parsed: Objection[] = [];
@@ -89,6 +89,25 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
       });
     }
 
+    // Fallback: If no structured objections found but content exists,
+    // treat paragraphs as individual objections (legacy format support)
+    if (parsed.length === 0 && content.trim()) {
+      const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
+      
+      paragraphs.forEach((paragraph, index) => {
+        const trimmed = paragraph.trim();
+        parsed.push({
+          id: `obj_${index}`,
+          title: `Objection ${index + 1}`,
+          response: trimmed
+        });
+      });
+      
+      if (showLegacyToast && parsed.length > 0) {
+        toast.info("Legacy format detected. Review and click 'Save All' to update.");
+      }
+    }
+
     return parsed;
   };
 
@@ -99,7 +118,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
 
   useEffect(() => {
     if (section) {
-      setObjections(parseObjections(section.content));
+      setObjections(parseObjections(section.content, true));
     }
   }, [section]);
 
