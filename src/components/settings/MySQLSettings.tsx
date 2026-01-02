@@ -251,6 +251,16 @@ export const MySQLSettings = () => {
           </p>
         </div>
 
+        {/* Database Prefix Info */}
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
+          <Badge variant="outline" className="font-mono text-xs">
+            Table Prefix: homebound_
+          </Badge>
+          <span className="text-sm text-muted-foreground">
+            All application tables use this prefix (e.g., homebound_script, homebound_app_settings)
+          </span>
+        </div>
+
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="text-sm">
