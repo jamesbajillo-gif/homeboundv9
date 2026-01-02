@@ -7,6 +7,16 @@ import { mysqlApi } from "@/lib/mysqlApi";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ObjectionListEditorProps {
   stepName: string;
@@ -47,6 +57,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
   const [editText, setEditText] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [newText, setNewText] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ListItem | null>(null);
 
   // Derive script name for alternatives
   const altScriptName = stepName === "outbound_objection" 
@@ -263,15 +274,24 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
     setEditText("");
   };
 
-  const handleDelete = async (item: ListItem) => {
-    if (item.type === 'alternative' && item.objectionId && item.altOrder !== undefined) {
+  const handleDeleteClick = (item: ListItem) => {
+    setDeleteTarget(item);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    
+    if (deleteTarget.type === 'alternative' && deleteTarget.objectionId && deleteTarget.altOrder !== undefined) {
       await deleteAltMutation.mutateAsync({
-        objectionId: item.objectionId,
-        altOrder: item.altOrder,
+        objectionId: deleteTarget.objectionId,
+        altOrder: deleteTarget.altOrder,
       });
+      toast.success("Alternative deleted");
     } else {
-      setItems(prev => prev.filter(i => i.id !== item.id));
+      setItems(prev => prev.filter(i => i.id !== deleteTarget.id));
+      toast.success("Objection deleted");
     }
+    setDeleteTarget(null);
   };
 
   const handleAdd = async () => {
@@ -407,7 +427,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 text-destructive"
-                    onClick={() => handleDelete(item)}
+                    onClick={() => handleDeleteClick(item)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -417,6 +437,26 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
           </div>
         ))}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete this {deleteTarget?.type === 'alternative' ? 'alternative' : 'objection'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The {deleteTarget?.type === 'alternative' ? 'alternative response' : 'objection'} will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };
