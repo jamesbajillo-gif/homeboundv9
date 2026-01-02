@@ -535,9 +535,9 @@ export const ObjectionListEditor = ({ stepName, stepTitle }: ObjectionListEditor
                                 key={altKey}
                                 className="border-l-2 border-amber-500/50 pl-3 py-1 group/alt"
                               >
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Badge variant="secondary" className="text-[10px]">Alt {alt.alt_order}</Badge>
-                                </div>
+                              <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="secondary" className="text-[10px]">#{alt.alt_order}</Badge>
+                              </div>
                                 {isEditingThis ? (
                                   <div className="flex gap-2">
                                     <Input
