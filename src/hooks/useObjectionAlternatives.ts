@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { mysqlApi } from "@/lib/mysqlApi";
-import { useGroup } from "@/contexts/GroupContext";
 import { useVICI } from "@/contexts/VICIContext";
 import { QUERY_KEYS } from "@/lib/queryKeys";
 
@@ -21,7 +20,6 @@ const TABLE_NAME = "homebound_objection_alts";
  * Alternatives are saved per script (inbound/outbound/listid) and objection.
  */
 export const useObjectionAlternatives = (stepName: string) => {
-  const { groupType } = useGroup();
   const { leadData } = useVICI();
   const queryClient = useQueryClient();
   
@@ -29,12 +27,11 @@ export const useObjectionAlternatives = (stepName: string) => {
   const viciListId = leadData?.list_id;
   const hasValidListId = viciListId && !viciListId.includes('--A--');
   
-  // Build the script name: listid_XXX_stepName or groupType_stepName or just stepName
+  // Build the script name: listid_XXX_stepName or use stepName directly
+  // Note: stepName should already include prefix (e.g., "outbound_objection") when passed from components
   const scriptName = hasValidListId 
     ? `listid_${viciListId}_${stepName}` 
-    : groupType === "outbound" 
-      ? `outbound_${stepName}` 
-      : stepName;
+    : stepName;
 
   // Fetch all alternatives for the current script
   const { data: alternatives = [], isLoading, refetch } = useQuery({
