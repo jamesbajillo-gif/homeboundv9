@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffect } from "react";
+import { ObjectionAlternativesEditor } from "./ObjectionAlternativesEditor";
 
 interface ListIdScriptEditorProps {
   listId: string;
@@ -118,6 +118,8 @@ export const ListIdScriptEditor = ({ listId, stepName, stepTitle }: ListIdScript
   }
 
   const isNew = !scriptData;
+  const isObjectionStep = stepName.includes("objection");
+  const objectionScriptName = `listid_${listId}`;
 
   return (
     <Card className={isNew ? "border-amber-500/50" : ""}>
@@ -176,6 +178,16 @@ export const ListIdScriptEditor = ({ listId, stepName, stepTitle }: ListIdScript
             Reset
           </Button>
         </div>
+
+        {/* Objection Alternatives Editor - shown only for objection steps */}
+        {isObjectionStep && content && (
+          <div className="pt-4 border-t">
+            <ObjectionAlternativesEditor 
+              scriptName={objectionScriptName}
+              scriptContent={content}
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

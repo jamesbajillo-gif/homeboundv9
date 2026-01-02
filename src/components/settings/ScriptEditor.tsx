@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { ObjectionAlternativesEditor } from "./ObjectionAlternativesEditor";
 
 interface ScriptSection {
   id: number | string;
@@ -594,6 +595,12 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
     );
   }
 
+  // Check if this is an objection step
+  const isObjectionStep = stepName.includes("objection");
+  const objectionScriptName = stepName.replace("_objection", "_objection").includes("outbound") 
+    ? "outbound_objection" 
+    : "inbound_objection";
+
   return (
     <Card className="p-6">
       <div className="space-y-6">
@@ -641,6 +648,16 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
             </Button>
           </div>
         </div>
+
+        {/* Objection Alternatives Editor - shown only for objection steps */}
+        {isObjectionStep && content && (
+          <div className="pt-4 border-t">
+            <ObjectionAlternativesEditor 
+              scriptName={objectionScriptName}
+              scriptContent={content}
+            />
+          </div>
+        )}
       </div>
     </Card>
   );
