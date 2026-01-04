@@ -18,6 +18,7 @@ import { useCustomTabs } from "@/hooks/useCustomTabs";
 import { useListIdTabVisibility } from "@/hooks/useListIdTabVisibility";
 import { useListIdTabOrder } from "@/hooks/useListIdTabOrder";
 import { useListIdCustomTabs } from "@/hooks/useListIdCustomTabs";
+import { useConfiguredListIds } from "@/hooks/useConfiguredListIds";
 
 type ScriptStep = "greeting";
 
@@ -74,18 +75,24 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const [activeListId, setActiveListId] = useState<string | null>(null);
   const [activeListName, setActiveListName] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const { groupType } = useGroup();
+  const { groupType, hasBeenToggled } = useGroup();
   const { leadData } = useVICI();
   const viciListId = leadData?.list_id;
+  
+  // Determine effective group type: default to outbound unless user has explicitly toggled
+  const effectiveGroupType = hasBeenToggled ? groupType : "outbound";
   
   // Get visibility, order, and custom tabs - use list ID specific hooks if list ID scripts are active
   // Note: We need to check usingListIdScripts, but it's set later. So we'll use both hooks conditionally
   // and switch based on the actual state after it's determined
   
-  // Default (inbound/outbound) hooks
-  const { isTabVisible: isTabVisibleDefault, isLoading: visibilityLoadingDefault } = useTabVisibility(groupType);
-  const { getOrderedTabs: getOrderedTabsDefault, isLoading: orderLoadingDefault } = useTabOrder(groupType);
-  const { tabs: customTabsDefault, isLoading: customTabsLoadingDefault } = useCustomTabs(groupType);
+  // Default (inbound/outbound) hooks - use effective group type (defaults to outbound unless toggled)
+  const { isTabVisible: isTabVisibleDefault, isLoading: visibilityLoadingDefault } = useTabVisibility(effectiveGroupType);
+  const { getOrderedTabs: getOrderedTabsDefault, isLoading: orderLoadingDefault } = useTabOrder(effectiveGroupType);
+  const { tabs: customTabsDefault, isLoading: customTabsLoadingDefault } = useCustomTabs(effectiveGroupType);
+  
+  // Fetch all configured list IDs to validate before querying
+  const { listIds: configuredListIds, isLoading: configuredListIdsLoading, isListIdConfigured, getListIdName } = useConfiguredListIds();
   
   // List ID specific hooks (only enabled when we have a valid list ID)
   const validListId = viciListId && !viciListId.includes('--A--') ? viciListId : null;
@@ -93,8 +100,8 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const { getOrderedTabs: getOrderedTabsListId, isLoading: orderLoadingListId } = useListIdTabOrder(validListId || "");
   const { tabs: customTabsListId, isLoading: customTabsLoadingListId } = useListIdCustomTabs(validListId || "");
   
-  // Get the fixed section config based on group type
-  const fixedSections = groupType === "outbound" ? OUTBOUND_FIXED_SECTIONS : INBOUND_FIXED_SECTIONS;
+  // Get the fixed section config based on effective group type (defaults to outbound unless toggled)
+  const fixedSections = effectiveGroupType === "outbound" ? OUTBOUND_FIXED_SECTIONS : INBOUND_FIXED_SECTIONS;
   
   // Helper function to safely parse selected_section_ids
   const parseSelectedSectionIds = (sectionIds: string | undefined): string[] | undefined => {
@@ -129,25 +136,23 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     },
   ];
 
-  // Determine which hooks to use based on whether we have a valid list ID
-  // We'll check this early to determine which custom tabs to load
-  const hasValidListId = viciListId && !viciListId.includes('--A--');
-  
-  // Use list ID hooks if we have a valid list ID, otherwise use default hooks
-  // Note: We'll refine this after scripts are loaded to check if list ID scripts actually exist
-  // For now, we'll use list ID hooks if we have a valid list ID
-  const isTabVisibleHook = hasValidListId ? isTabVisibleListId : isTabVisibleDefault;
-  const getOrderedTabsHook = hasValidListId ? getOrderedTabsListId : getOrderedTabsDefault;
-  const customTabsHook = hasValidListId ? customTabsListId : customTabsDefault;
-  const visibilityLoadingHook = hasValidListId ? visibilityLoadingListId : visibilityLoadingDefault;
-  const orderLoadingHook = hasValidListId ? orderLoadingListId : orderLoadingDefault;
-  const customTabsLoadingHook = hasValidListId ? customTabsLoadingListId : customTabsLoadingDefault;
+  // Determine which hooks to use initially
+  // IMPORTANT: We can't know if list ID scripts exist until they're loaded
+  // So we always use default hooks initially, then switch to list ID hooks only if scripts are found
+  // This ensures proper fallback when list ID is specified but doesn't exist
+  const isTabVisibleHook = isTabVisibleDefault;
+  const getOrderedTabsHook = getOrderedTabsDefault;
+  const customTabsHook = customTabsDefault;
+  const visibilityLoadingHook = visibilityLoadingDefault;
+  const orderLoadingHook = orderLoadingDefault;
+  const customTabsLoadingHook = customTabsLoadingDefault;
 
   // Combine fixed and custom sections, then filter by visibility and order
   // Use hook versions initially for early rendering
+  // Always use default sections initially - will switch to list ID sections only if scripts are found
   const initialVisibleSections = useMemo(() => {
-    // Use list ID fixed sections if we have a valid list ID, otherwise use group type sections
-    const sectionsToUse = hasValidListId ? LIST_ID_FIXED_SECTIONS : fixedSections;
+    // Always use default fixed sections initially (will switch to list ID sections if scripts are found)
+    const sectionsToUse = fixedSections;
     
     // Map custom tabs to section format
     const customSections: SectionConfig[] = customTabsHook.map(tab => ({
@@ -173,7 +178,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     const withKey = visible.map(s => ({ ...s, key: s.visibilityKey }));
     const ordered = getOrderedTabsHook(withKey);
     return ordered;
-  }, [fixedSections, customTabsHook, isTabVisibleHook, getOrderedTabsHook, hasValidListId]);
+  }, [fixedSections, customTabsHook, isTabVisibleHook, getOrderedTabsHook]);
   
   // Use initialVisibleSections for initial state, will be updated when finalVisibleSections is computed
   const [activeSection, setActiveSection] = useState<string>("greeting");
@@ -254,7 +259,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     queryFn: async () => {
       return await fetchScriptDataInternal();
     },
-    enabled: !!groupType && !customTabsLoadingHook,
+    enabled: !!groupType && !customTabsLoadingHook && !configuredListIdsLoading,
     staleTime: 30000, // 30 seconds - prevents unnecessary refetches
   });
 
@@ -326,8 +331,9 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   };
 
   // Helper: Load default scripts based on group type (including custom tabs)
+  // Default to outbound unless user has explicitly toggled
   const loadDefaultScripts = async () => {
-    const prefix = groupType === "outbound" ? "outbound_" : "";
+    const prefix = effectiveGroupType === "outbound" ? "outbound_" : "";
     const stepMapping: Record<string, string> = {
       greeting: `${prefix}greeting`,
     };
@@ -373,59 +379,63 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const fetchScriptDataInternal = async () => {
     const viciListId = leadData?.list_id;
     
-    // OPTIMIZATION: Check List ID first
+    // OPTIMIZATION: First check if list ID is configured before querying
     if (viciListId && !viciListId.includes('--A--')) {
-      // Load List ID scripts FIRST
-      const listScripts = await mysqlApi.findByField<{
-        step_name: string;
-        title: string;
-        content: string;
-        name: string;
-      }>(
-        "tmdebt_list_id_config",
-        "list_id",
-        viciListId
-      );
+      const isConfigured = isListIdConfigured(viciListId);
       
-      if (listScripts && listScripts.length > 0) {
-        const displayName = listScripts[0]?.name || viciListId;
+      if (isConfigured) {
+        // List ID exists in configuration - load its scripts
+        const listScripts = await mysqlApi.findByField<{
+          step_name: string;
+          title: string;
+          content: string;
+          name: string;
+        }>(
+          "tmdebt_list_id_config",
+          "list_id",
+          viciListId
+        );
         
-        // Format List ID scripts
-        const listIdScripts = listScripts.reduce((acc, item) => {
-          const stepKey = item.step_name as ScriptStep;
-          if (stepKey) {
-            acc[stepKey] = {
-              title: item.title,
-              content: item.content,
+        if (listScripts && listScripts.length > 0) {
+          const displayName = getListIdName(viciListId) || listScripts[0]?.name || viciListId;
+          
+          // Format List ID scripts
+          const listIdScripts = listScripts.reduce((acc, item) => {
+            const stepKey = item.step_name as ScriptStep;
+            if (stepKey) {
+              acc[stepKey] = {
+                title: item.title,
+                content: item.content,
+              };
+            }
+            return acc;
+          }, {} as Record<ScriptStep, { title: string; content: string }>);
+          
+          // CHECK: Do we have ALL required scripts?
+          if (isCompleteScriptSet(listIdScripts)) {
+            return {
+              scripts: listIdScripts,
+              usingListIdScripts: true,
+              activeListId: viciListId,
+              activeListName: displayName,
+            };
+          } else {
+            // Continue to load defaults and merge (hybrid mode)
+            const defaultScripts = await loadDefaultScripts();
+            const mergedScripts = { ...defaultScripts, ...listIdScripts };
+            
+            return {
+              scripts: mergedScripts,
+              usingListIdScripts: true,
+              activeListId: viciListId,
+              activeListName: displayName,
             };
           }
-          return acc;
-        }, {} as Record<ScriptStep, { title: string; content: string }>);
-        
-        // CHECK: Do we have ALL required scripts?
-        if (isCompleteScriptSet(listIdScripts)) {
-          return {
-            scripts: listIdScripts,
-            usingListIdScripts: true,
-            activeListId: viciListId,
-            activeListName: displayName,
-          };
-        } else {
-          // Continue to load defaults and merge (hybrid mode)
-          const defaultScripts = await loadDefaultScripts();
-          const mergedScripts = { ...defaultScripts, ...listIdScripts };
-          
-          return {
-            scripts: mergedScripts,
-            usingListIdScripts: true,
-            activeListId: viciListId,
-            activeListName: displayName,
-          };
         }
       }
     }
     
-    // FALLBACK: Load defaults (no List ID or not found)
+    // FALLBACK: Load defaults (no List ID, not configured, or not found)
     const defaultScripts = await loadDefaultScripts();
     return {
       scripts: defaultScripts,

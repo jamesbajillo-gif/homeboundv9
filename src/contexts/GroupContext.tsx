@@ -7,22 +7,25 @@ interface GroupContextType {
   groupType: GroupType;
   loading: boolean;
   toggleGroup: () => void;
+  hasBeenToggled: boolean;
 }
 
 const GroupContext = createContext<GroupContextType | undefined>(undefined);
 
 export function GroupProvider({ children }: { children: React.ReactNode }) {
   const [groupType, setGroupType] = useState<GroupType>("outbound");
+  const [hasBeenToggled, setHasBeenToggled] = useState(false);
   const [loading] = useState(false);
 
   // Toggle between inbound and outbound (manual override always allowed)
   const toggleGroup = () => {
     const newGroupType: GroupType = groupType === "inbound" ? "outbound" : "inbound";
     setGroupType(newGroupType);
+    setHasBeenToggled(true);
   };
 
   return (
-    <GroupContext.Provider value={{ groupType, loading, toggleGroup }}>
+    <GroupContext.Provider value={{ groupType, loading, toggleGroup, hasBeenToggled }}>
       {children}
     </GroupContext.Provider>
   );
