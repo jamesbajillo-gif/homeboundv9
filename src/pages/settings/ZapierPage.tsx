@@ -3,6 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ZapierSettings } from "@/components/settings/ZapierSettings";
+import { SettingsCampaignSelector } from "@/components/settings/SettingsCampaignSelector";
 
 const ZapierPage = () => {
   const navigate = useNavigate();

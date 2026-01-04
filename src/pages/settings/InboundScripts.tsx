@@ -45,7 +45,7 @@ import {
 
 const InboundScripts = () => {
   const navigate = useNavigate();
-  const { tabs, isLoading, createTab, updateTab, deleteTab, isCreating, isDeleting } = useCustomTabs("inbound");
+  const { tabs, isLoading, createTab, updateTab, deleteTabByKey, isCreating, isDeleting } = useCustomTabs("inbound");
   const { isTabVisible, setTabVisibility, isUpdating: isVisibilityUpdating } = useTabVisibility("inbound");
   const { order, setTabOrder, getOrderedTabs, isLoading: isOrderLoading } = useTabOrder("inbound");
   
@@ -173,7 +173,7 @@ const InboundScripts = () => {
 
   const handleConfirmDelete = async () => {
     if (deleteTarget) {
-      await deleteTab(deleteTarget.key);
+      await deleteTabByKey(deleteTarget.key);
       setDeleteTarget(null);
     }
   };

@@ -177,6 +177,10 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
     }
   };
 
+  const deleteTabByKey = async (tabKey: string) => {
+    await deleteMutation.mutateAsync({ tabKey });
+  };
+
   // Reorder tabs by updating display_order
   const reorderTabsMutation = useMutation({
     mutationFn: async ({ tabIds }: { tabIds: string[] }) => {
@@ -237,6 +241,7 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
     updateTab,
     updateTabById,
     deleteTab,
+    deleteTabByKey,
     reorderTabs,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,

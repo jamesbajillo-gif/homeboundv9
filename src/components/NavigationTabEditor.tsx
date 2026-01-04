@@ -33,20 +33,25 @@ interface NavigationTabEditorProps {
   onSave?: () => void;
 }
 
+// Unified tab type for the editor
+interface EditorTab {
+  id: string;
+  title: string;
+  isDefault: boolean;
+  tabKey?: string; // For custom tabs
+  originalTab?: CustomTab; // Reference to original CustomTab for updates
+}
+
 interface SortableTabItemProps {
-  tab: CustomTab | { id: string; title: string; isDefault?: boolean };
-  isDefault?: boolean;
+  tab: EditorTab;
   onRename: (id: string, newTitle: string) => void;
   onDelete?: (id: string) => void;
 }
 
-function SortableTabItem({ tab, isDefault, onRename, onDelete }: SortableTabItemProps) {
+function SortableTabItem({ tab, onRename, onDelete }: SortableTabItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(tab.title);
-  // Get the ID for sorting - use tab_key for custom tabs, id for default tabs
-  const sortableId = isDefault 
-    ? (tab.id || '') 
-    : ((tab as CustomTab).tab_key || tab.id?.toString() || '');
+  const sortableId = tab.id;
   
   const {
     attributes,
@@ -65,7 +70,7 @@ function SortableTabItem({ tab, isDefault, onRename, onDelete }: SortableTabItem
 
   const handleSave = () => {
     if (editTitle.trim()) {
-      onRename(tab.id?.toString() || tab.tab_key || tab.id || '', editTitle.trim());
+      onRename(tab.id, editTitle.trim());
       setIsEditing(false);
     }
   };
@@ -85,9 +90,9 @@ function SortableTabItem({ tab, isDefault, onRename, onDelete }: SortableTabItem
       style={style}
       className={`flex items-center gap-2 p-3 border rounded-lg bg-background transition-all ${
         isDragging ? 'shadow-lg border-primary' : 'hover:border-primary/50'
-      } ${isDefault ? 'opacity-75' : ''}`}
+      } ${tab.isDefault ? 'opacity-75' : ''}`}
     >
-      {!isDefault && (
+      {!tab.isDefault && (
         <div
           {...attributes}
           {...listeners}
@@ -98,7 +103,7 @@ function SortableTabItem({ tab, isDefault, onRename, onDelete }: SortableTabItem
         </div>
       )}
       
-      {isDefault && (
+      {tab.isDefault && (
         <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
           <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
         </div>
@@ -115,24 +120,24 @@ function SortableTabItem({ tab, isDefault, onRename, onDelete }: SortableTabItem
         />
       ) : (
         <span
-          className={`flex-1 ${isDefault ? 'cursor-default' : 'cursor-pointer hover:text-primary'}`}
-          onClick={() => !isDefault && setIsEditing(true)}
-          title={isDefault ? 'Default tab (cannot be renamed)' : 'Click to rename'}
+          className={`flex-1 ${tab.isDefault ? 'cursor-default' : 'cursor-pointer hover:text-primary'}`}
+          onClick={() => !tab.isDefault && setIsEditing(true)}
+          title={tab.isDefault ? 'Default tab (cannot be renamed)' : 'Click to rename'}
         >
           {tab.title}
         </span>
       )}
       
-      {isDefault && (
+      {tab.isDefault && (
         <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">Default</span>
       )}
       
-      {!isDefault && onDelete && (
+      {!tab.isDefault && onDelete && (
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
-          onClick={() => onDelete(tab.id?.toString() || tab.tab_key || '')}
+          onClick={() => onDelete(tab.id)}
           title="Delete tab"
         >
           <X className="h-4 w-4" />
@@ -158,21 +163,23 @@ export const NavigationTabEditor = ({ groupType, defaultSections, onSave }: Navi
     })
   );
 
-  // Combine default sections and custom tabs
-  const allTabs = useMemo(() => {
-    const defaultTabs = defaultSections.map(section => ({
+  // Combine default sections and custom tabs into unified EditorTab format
+  const allTabs = useMemo((): EditorTab[] => {
+    const defaultTabs: EditorTab[] = defaultSections.map(section => ({
       id: section.id,
       title: section.title,
       isDefault: true,
     }));
     
-    const customTabs = tabs.map(tab => ({
-      ...tab,
+    const customTabsList: EditorTab[] = tabs.map(tab => ({
       id: tab.tab_key,
+      title: tab.tab_title,
       isDefault: false,
+      tabKey: tab.tab_key,
+      originalTab: tab,
     }));
     
-    return [...defaultTabs, ...customTabs];
+    return [...defaultTabs, ...customTabsList];
   }, [defaultSections, tabs]);
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -180,14 +187,8 @@ export const NavigationTabEditor = ({ groupType, defaultSections, onSave }: Navi
     
     if (!over || active.id === over.id) return;
     
-    const oldIndex = allTabs.findIndex(tab => {
-      const tabId = tab.isDefault ? (tab.id || '') : ((tab as CustomTab).tab_key || tab.id?.toString() || '');
-      return tabId === active.id || tabId.toString() === active.id.toString();
-    });
-    const newIndex = allTabs.findIndex(tab => {
-      const tabId = tab.isDefault ? (tab.id || '') : ((tab as CustomTab).tab_key || tab.id?.toString() || '');
-      return tabId === over.id || tabId.toString() === over.id.toString();
-    });
+    const oldIndex = allTabs.findIndex(tab => tab.id === active.id || tab.id === active.id.toString());
+    const newIndex = allTabs.findIndex(tab => tab.id === over.id || tab.id === over.id.toString());
     
     if (oldIndex === -1 || newIndex === -1) return;
     
@@ -226,34 +227,32 @@ export const NavigationTabEditor = ({ groupType, defaultSections, onSave }: Navi
     const reorderedCustomTabs = arrayMove(customTabs, oldCustomIndex, newCustomIndex);
     
     // Update display_order for all custom tabs in one batch
-    const tabKeys = reorderedCustomTabs.map(t => (t as CustomTab).tab_key).filter(Boolean);
-    if (tabKeys.length > 0) {
-      // Use a single mutation to update all orders
-      reorderTabs(reorderedCustomTabs[0].tab_key || '', newCustomIndex + defaultTabs.length);
+    const firstTab = reorderedCustomTabs[0];
+    if (firstTab && firstTab.tabKey) {
+      reorderTabs(firstTab.tabKey, newCustomIndex + defaultTabs.length);
     }
   };
 
   const handleRename = (id: string, newTitle: string) => {
     // Check if it's a default section or custom tab
-    const isDefault = defaultSections.some(s => s.id === id);
+    const editorTab = allTabs.find(t => t.id === id);
     
-    if (isDefault) {
+    if (!editorTab || editorTab.isDefault) {
       toast.info('Default tabs cannot be renamed from here. Use Settings to rename them.');
       return;
     }
     
-    // Find the tab and update it
-    const tab = tabs.find(t => t.tab_key === id || t.id?.toString() === id);
-    if (tab && tab.id) {
-      updateTabById(tab.id, { tab_title: newTitle });
+    // Find the original tab and update it
+    if (editorTab.originalTab && editorTab.originalTab.id) {
+      updateTabById(editorTab.originalTab.id, { tab_title: newTitle });
     }
   };
 
   const handleDelete = (id: string) => {
-    const tab = tabs.find(t => t.tab_key === id || t.id?.toString() === id);
-    if (tab && tab.id) {
-      if (window.confirm(`Delete tab "${tab.tab_title}"? This action cannot be undone.`)) {
-        deleteTab(tab.id);
+    const editorTab = allTabs.find(t => t.id === id);
+    if (editorTab && editorTab.originalTab && editorTab.originalTab.id) {
+      if (window.confirm(`Delete tab "${editorTab.title}"? This action cannot be undone.`)) {
+        deleteTab(editorTab.originalTab.id);
       }
     }
   };
@@ -341,29 +340,18 @@ export const NavigationTabEditor = ({ groupType, defaultSections, onSave }: Navi
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext
-                  items={allTabs.map(tab => {
-                    if (tab.isDefault) {
-                      return tab.id || '';
-                    }
-                    return (tab as CustomTab).tab_key || tab.id?.toString() || '';
-                  })}
+                  items={allTabs.map(tab => tab.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   <div className="space-y-2">
-                    {allTabs.map((tab) => {
-                      const tabId = tab.isDefault 
-                        ? (tab.id || '') 
-                        : ((tab as CustomTab).tab_key || tab.id?.toString() || '');
-                      return (
-                        <SortableTabItem
-                          key={tabId}
-                          tab={tab}
-                          isDefault={tab.isDefault}
-                          onRename={handleRename}
-                          onDelete={tab.isDefault ? undefined : handleDelete}
-                        />
-                      );
-                    })}
+                    {allTabs.map((tab) => (
+                      <SortableTabItem
+                        key={tab.id}
+                        tab={tab}
+                        onRename={handleRename}
+                        onDelete={tab.isDefault ? undefined : handleDelete}
+                      />
+                    ))}
                   </div>
                 </SortableContext>
               </DndContext>
