@@ -200,6 +200,9 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   }, [initialVisibleSections, activeSection]);
 
   // Track scroll position to update active section
+  // Note: We use a ref to get the latest finalVisibleSections to avoid circular dependencies
+  const finalVisibleSectionsRef = useRef<SectionConfig[]>([]);
+  
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -208,7 +211,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
       const containerHeight = container.offsetHeight;
       const scrollPosition = container.scrollTop + containerHeight / 3;
       
-      const sections = finalVisibleSections.length > 0 ? finalVisibleSections : initialVisibleSections;
+      const sections = finalVisibleSectionsRef.current.length > 0 ? finalVisibleSectionsRef.current : initialVisibleSections;
       for (let i = sections.length - 1; i >= 0; i--) {
         const element = document.getElementById(sections[i].id);
         if (element && element.offsetTop - container.offsetTop <= scrollPosition) {
@@ -222,12 +225,12 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [activeSection, finalVisibleSections, initialVisibleSections]);
+  }, [activeSection, initialVisibleSections]);
 
   // Keyboard navigation (up/down arrows)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const sections = finalVisibleSections.length > 0 ? finalVisibleSections : initialVisibleSections;
+      const sections = finalVisibleSectionsRef.current.length > 0 ? finalVisibleSectionsRef.current : initialVisibleSections;
       const currentIndex = sections.findIndex(s => s.id === activeSection);
       
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
@@ -243,7 +246,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeSection, handleNavigate, finalVisibleSections, initialVisibleSections]);
+  }, [activeSection, handleNavigate, initialVisibleSections]);
 
   // Fetch scripts using React Query - auto-refreshes when cache is invalidated or custom tabs change
   const { data: fetchedScriptData, isLoading: loading } = useQuery({
@@ -305,6 +308,11 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     const ordered = getOrderedTabs(withKey);
     return ordered;
   }, [fixedSections, customTabs, isTabVisible, getOrderedTabs, usingListIdScripts, activeListId]);
+
+  // Keep ref updated with latest finalVisibleSections
+  useEffect(() => {
+    finalVisibleSectionsRef.current = finalVisibleSections;
+  }, [finalVisibleSections]);
 
   // Use finalVisibleSections if available (after scripts load), otherwise use initialVisibleSections
   const visibleSections = finalVisibleSections.length > 0 ? finalVisibleSections : initialVisibleSections;

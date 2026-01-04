@@ -36,6 +36,9 @@ interface UnifiedItem {
   altOrder?: number;
   submittedBy?: string;
   isSubmission?: boolean;
+  submissionId?: number;
+  isApproved?: boolean;
+  scriptType?: 'default' | 'custom' | 'submitted';
 }
 
 export const SpielDisplay = ({ content, stepName, accentColor = "border-primary", listId, stepTitle }: SpielDisplayProps) => {

@@ -45,7 +45,7 @@ import {
 
 const OutboundScripts = () => {
   const navigate = useNavigate();
-  const { tabs, isLoading, createTab, updateTab, deleteTab, isCreating, isDeleting } = useCustomTabs("outbound");
+  const { tabs, isLoading, createTab, updateTab, deleteTabByKey, isCreating, isDeleting } = useCustomTabs("outbound");
   const { isTabVisible, setTabVisibility, isUpdating: isVisibilityUpdating } = useTabVisibility("outbound");
   const { order, setTabOrder, getOrderedTabs, isLoading: isOrderLoading } = useTabOrder("outbound");
   
@@ -172,7 +172,7 @@ const OutboundScripts = () => {
 
   const handleConfirmDelete = async () => {
     if (deleteTarget) {
-      await deleteTab(deleteTarget.key);
+      await deleteTabByKey(deleteTarget.key);
       setDeleteTarget(null);
     }
   };
