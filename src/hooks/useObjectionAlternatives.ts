@@ -18,6 +18,9 @@ const TABLE_NAME = "tmdebt_objection_alts";
 /**
  * Hook to manage objection handling alternatives.
  * Alternatives are saved per script (inbound/outbound/listid) and objection.
+ * 
+ * Priority: List ID > Campaign (stepName should already have prefix if needed)
+ * If no list ID alternatives exist, falls back to campaign alternatives.
  */
 export const useObjectionAlternatives = (stepName: string) => {
   const { leadData } = useVICI();
@@ -27,16 +30,44 @@ export const useObjectionAlternatives = (stepName: string) => {
   const viciListId = leadData?.list_id;
   const hasValidListId = viciListId && !viciListId.includes('--A--');
   
-  // Build the script name: listid_XXX_stepName or use stepName directly
-  // Note: stepName should already include prefix (e.g., "outbound_objection") when passed from components
-  // Check if stepName already has a prefix to avoid double-prefixing
-  const scriptName = stepName.startsWith('listid_')
-    ? stepName // Already has listid prefix
-    : hasValidListId 
-      ? `listid_${viciListId}_${stepName}` 
-      : stepName;
+  // Already prefixed - use as-is
+  const alreadyPrefixed = stepName.startsWith('listid_');
+  
+  // Build potential script names for priority checking
+  const listIdScriptName = hasValidListId ? `listid_${viciListId}_${stepName}` : null;
+  const campaignScriptName = stepName; // stepName should already have outbound_ prefix if needed
+  
+  // Fetch list ID alternatives first (to check if they exist)
+  const { data: listIdAlternatives = [] } = useQuery({
+    queryKey: [QUERY_KEYS.scripts.all, "objection_alts", "listid_check", listIdScriptName],
+    queryFn: async (): Promise<ObjectionAlternative[]> => {
+      if (!listIdScriptName) return [];
+      try {
+        return await mysqlApi.findByField<ObjectionAlternative>(
+          TABLE_NAME,
+          "script_name",
+          listIdScriptName,
+          { orderBy: "alt_order", order: "ASC" }
+        );
+      } catch (error) {
+        return [];
+      }
+    },
+    enabled: !!listIdScriptName && !alreadyPrefixed,
+    staleTime: 60000,
+  });
+  
+  // Determine which script name to use based on priority:
+  // 1. If stepName is already prefixed with listid_, use it as-is
+  // 2. If list ID alternatives exist, use list ID script name
+  // 3. Otherwise fall back to campaign script name
+  const scriptName = alreadyPrefixed
+    ? stepName
+    : (listIdScriptName && listIdAlternatives.length > 0)
+      ? listIdScriptName
+      : campaignScriptName;
 
-  // Fetch all alternatives for the current script
+  // Fetch all alternatives for the determined script
   const { data: alternatives = [], isLoading, refetch } = useQuery({
     queryKey: [QUERY_KEYS.scripts.all, "objection_alts", scriptName],
     queryFn: async (): Promise<ObjectionAlternative[]> => {

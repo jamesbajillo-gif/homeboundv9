@@ -19,6 +19,9 @@ const TABLE_NAME = "tmdebt_spiel_alts";
 /**
  * Hook to manage spiel alternatives for greeting and closing scripts.
  * Alternatives are saved per script (inbound/outbound/listid) and spiel.
+ * 
+ * Priority: List ID > Campaign (outbound/inbound)
+ * If no list ID alternatives exist, falls back to campaign alternatives.
  */
 export const useSpielAlternatives = (stepName: string) => {
   const { groupType } = useGroup();
@@ -29,19 +32,48 @@ export const useSpielAlternatives = (stepName: string) => {
   const viciListId = leadData?.list_id;
   const hasValidListId = viciListId && !viciListId.includes('--A--');
   
-  // Build the script name: listid_XXX_stepName or groupType_stepName or just stepName
-  // Check if stepName already has a prefix to avoid double-prefixing
-  const scriptName = stepName.startsWith('listid_')
-    ? stepName // Already has listid prefix
-    : stepName.startsWith('outbound_')
-      ? stepName // Already has outbound prefix
-      : hasValidListId 
-        ? `listid_${viciListId}_${stepName}` 
-        : groupType === "outbound" 
-          ? `outbound_${stepName}` 
-          : stepName;
+  // Build potential script names for priority checking
+  const listIdScriptName = hasValidListId ? `listid_${viciListId}_${stepName}` : null;
+  const campaignScriptName = stepName.startsWith('outbound_')
+    ? stepName
+    : groupType === "outbound"
+      ? `outbound_${stepName}`
+      : stepName;
+  
+  // Already prefixed - use as-is
+  const alreadyPrefixed = stepName.startsWith('listid_') || stepName.startsWith('outbound_');
+  
+  // Fetch list ID alternatives first (to check if they exist)
+  const { data: listIdAlternatives = [] } = useQuery({
+    queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", "listid_check", listIdScriptName],
+    queryFn: async (): Promise<SpielAlternative[]> => {
+      if (!listIdScriptName) return [];
+      try {
+        return await mysqlApi.findByField<SpielAlternative>(
+          TABLE_NAME,
+          "script_name",
+          listIdScriptName,
+          { orderBy: "alt_order", order: "ASC" }
+        );
+      } catch (error) {
+        return [];
+      }
+    },
+    enabled: !!listIdScriptName && !alreadyPrefixed,
+    staleTime: 60000,
+  });
+  
+  // Determine which script name to use based on priority:
+  // 1. If stepName is already prefixed, use it as-is
+  // 2. If list ID alternatives exist, use list ID script name
+  // 3. Otherwise fall back to campaign script name
+  const scriptName = alreadyPrefixed
+    ? stepName
+    : (listIdScriptName && listIdAlternatives.length > 0)
+      ? listIdScriptName
+      : campaignScriptName;
 
-  // Fetch all alternatives for the current script
+  // Fetch all alternatives for the determined script
   const { data: alternatives = [], isLoading, refetch } = useQuery({
     queryKey: [QUERY_KEYS.scripts.all, "spiel_alts", scriptName],
     queryFn: async (): Promise<SpielAlternative[]> => {

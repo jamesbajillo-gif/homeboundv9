@@ -53,12 +53,12 @@ export const useScriptQualificationConfig = (overrideScriptName?: string, listId
     ? (overrideScriptName.includes("outbound") ? "outbound_qualification" : "qualification")
     : (groupType === "outbound" ? "outbound_qualification" : "qualification");
   
-  // Build storage key - check for list ID-specific config first if listId is provided
-  // List ID configs use a simpler key pattern: listid_${listId} (matches ListIdQualificationSelector)
-  // Fall back to stepName-specific key for default configs
-  const storageKey = listId && listId !== '--A--list_id--B--'
+  // Build storage keys - list ID key and campaign fallback key
+  const hasValidListId = listId && listId !== '--A--list_id--B--';
+  const listIdStorageKey = hasValidListId
     ? `tmdebt_qualification_script_selected_listid_${listId}`
-    : `${STORAGE_KEY_PREFIX}_${stepName}`;
+    : null;
+  const campaignStorageKey = `${STORAGE_KEY_PREFIX}_${stepName}`;
   
   // Determine group type from script name if override is provided
   const effectiveGroupType = overrideScriptName?.includes("outbound") ? "outbound" : groupType;
@@ -84,30 +84,66 @@ export const useScriptQualificationConfig = (overrideScriptName?: string, listId
         return DEFAULT_QUALIFICATION_CONFIG;
       }
     },
-    staleTime: 30000, // 30 seconds - prevents unnecessary refetches
+    staleTime: 30000,
   });
 
-  // Fetch script-specific selections
-  const { data: scriptSelections, isLoading: selectionsLoading } = useQuery({
-    queryKey: QUERY_KEYS.scripts.byStep(storageKey),
+  // Fetch list ID-specific selections first (if we have a valid list ID)
+  const { data: listIdSelections, isLoading: listIdSelectionsLoading } = useQuery({
+    queryKey: QUERY_KEYS.scripts.byStep(listIdStorageKey || ""),
     queryFn: async (): Promise<SelectedQuestion[]> => {
+      if (!listIdStorageKey) return [];
       try {
         const data = await mysqlApi.findOneByField<{
           setting_key: string;
           setting_value: string;
-        }>("tmdebt_app_settings", "setting_key", storageKey);
+        }>("tmdebt_app_settings", "setting_key", listIdStorageKey);
 
         if (data?.setting_value) {
           return JSON.parse(data.setting_value);
         }
         return [];
       } catch (error) {
-        console.error("Error loading script selections:", error);
+        console.error("Error loading list ID selections:", error);
         return [];
       }
     },
-    staleTime: 30000, // 30 seconds - prevents unnecessary refetches
+    enabled: !!listIdStorageKey,
+    staleTime: 30000,
   });
+
+  // Fetch campaign-level selections (fallback)
+  const { data: campaignSelections, isLoading: campaignSelectionsLoading } = useQuery({
+    queryKey: QUERY_KEYS.scripts.byStep(campaignStorageKey),
+    queryFn: async (): Promise<SelectedQuestion[]> => {
+      try {
+        const data = await mysqlApi.findOneByField<{
+          setting_key: string;
+          setting_value: string;
+        }>("tmdebt_app_settings", "setting_key", campaignStorageKey);
+
+        if (data?.setting_value) {
+          return JSON.parse(data.setting_value);
+        }
+        return [];
+      } catch (error) {
+        console.error("Error loading campaign selections:", error);
+        return [];
+      }
+    },
+    staleTime: 30000,
+  });
+
+  // Determine which selections to use: List ID > Campaign
+  // Use list ID selections if they exist, otherwise fall back to campaign selections
+  const selectionsLoading = listIdSelectionsLoading || campaignSelectionsLoading;
+  const scriptSelections = (listIdSelections && listIdSelections.length > 0)
+    ? listIdSelections
+    : campaignSelections;
+  
+  // Determine the effective storage key for script alternatives
+  const effectiveStorageKey = (listIdSelections && listIdSelections.length > 0)
+    ? listIdStorageKey
+    : campaignStorageKey;
 
   // Fetch script-specific alternatives from dedicated table
   const { data: scriptAlternatives = [], isLoading: altsLoading } = useQuery({
@@ -126,7 +162,7 @@ export const useScriptQualificationConfig = (overrideScriptName?: string, listId
         return [];
       }
     },
-    staleTime: 30000, // 30 seconds - prevents unnecessary refetches
+    staleTime: 30000,
   });
 
   // Build the merged config for display
