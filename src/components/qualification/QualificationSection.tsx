@@ -19,7 +19,7 @@ interface QualificationSectionProps {
 }
 
 // Storage key for current alternative selection index
-const SELECTION_STORAGE_KEY = "qualification_question_selections";
+const SELECTION_STORAGE_KEY = "tmdebt_qualification_question_selections";
 
 // Get stored selection index per question
 const getStoredSelections = (): Record<string, number> => {

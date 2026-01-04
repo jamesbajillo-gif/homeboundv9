@@ -13,7 +13,7 @@ export interface ScriptQuestionAlt {
   is_default: number;
 }
 
-const TABLE_NAME = "homebound_script_question_alts";
+const TABLE_NAME = "tmdebt_script_question_alts";
 
 /**
  * Hook to manage script-specific question alternatives.

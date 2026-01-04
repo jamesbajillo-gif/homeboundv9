@@ -1,5 +1,5 @@
--- Create homebound_script table
-create table if not exists public.homebound_script (
+-- Create tmdebt_script table
+create table if not exists public.tmdebt_script (
   id uuid primary key default gen_random_uuid(),
   step_name text not null unique,
   title text not null,
@@ -9,34 +9,34 @@ create table if not exists public.homebound_script (
 );
 
 -- Enable Row Level Security
-alter table public.homebound_script enable row level security;
+alter table public.tmdebt_script enable row level security;
 
 -- Drop existing policies if they exist
-drop policy if exists "Allow public read access" on public.homebound_script;
-drop policy if exists "Allow authenticated insert" on public.homebound_script;
-drop policy if exists "Allow authenticated update" on public.homebound_script;
-drop policy if exists "Allow authenticated delete" on public.homebound_script;
-drop policy if exists "Allow public insert" on public.homebound_script;
-drop policy if exists "Allow public update" on public.homebound_script;
-drop policy if exists "Allow public delete" on public.homebound_script;
+drop policy if exists "Allow public read access" on public.tmdebt_script;
+drop policy if exists "Allow authenticated insert" on public.tmdebt_script;
+drop policy if exists "Allow authenticated update" on public.tmdebt_script;
+drop policy if exists "Allow authenticated delete" on public.tmdebt_script;
+drop policy if exists "Allow public insert" on public.tmdebt_script;
+drop policy if exists "Allow public update" on public.tmdebt_script;
+drop policy if exists "Allow public delete" on public.tmdebt_script;
 
 -- Create policy to allow public read access
 create policy "Allow public read access"
-  on public.homebound_script
+  on public.tmdebt_script
   for select
   to public
   using (true);
 
 -- Create policy to allow public insert
 create policy "Allow public insert"
-  on public.homebound_script
+  on public.tmdebt_script
   for insert
   to public
   with check (true);
 
 -- Create policy to allow public update
 create policy "Allow public update"
-  on public.homebound_script
+  on public.tmdebt_script
   for update
   to public
   using (true)
@@ -44,7 +44,7 @@ create policy "Allow public update"
 
 -- Create policy to allow public delete
 create policy "Allow public delete"
-  on public.homebound_script
+  on public.tmdebt_script
   for delete
   to public
   using (true);
@@ -59,12 +59,12 @@ end;
 $$ language plpgsql;
 
 create trigger set_updated_at
-  before update on public.homebound_script
+  before update on public.tmdebt_script
   for each row
   execute function public.handle_updated_at();
 
 -- Insert default script data
-insert into public.homebound_script (step_name, title, content) values
+insert into public.tmdebt_script (step_name, title, content) values
   ('greeting', '1 - Opening Greeting', '"Good [morning/afternoon/evening], this is [Your Name] calling from [Company Name]. Am I speaking with [Customer Name]?"
 
 [Wait for confirmation]

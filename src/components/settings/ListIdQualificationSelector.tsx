@@ -62,7 +62,7 @@ export const ListIdQualificationSelector = ({
   const [editingQuestion, setEditingQuestion] = useState<SelectedQuestion | null>(null);
   const [newAltText, setNewAltText] = useState("");
   const [pendingSelections, setPendingSelections] = useState<Set<string>>(new Set());
-  const storageKey = `qualification_script_selected_listid_${listId}`;
+  const storageKey = `tmdebt_qualification_script_selected_listid_${listId}`;
 
   // Fetch both inbound and outbound master configs and merge them
   const { data: masterConfig, isLoading: configLoading } = useQuery({
@@ -72,10 +72,10 @@ export const ListIdQualificationSelector = ({
         // Fetch both inbound and outbound configs
         const [inboundData, outboundData] = await Promise.all([
           mysqlApi.findOneByField<{ setting_key: string; setting_value: string }>(
-            "homebound_app_settings", "setting_key", "qualification_config_inbound"
+            "tmdebt_app_settings", "setting_key", "tmdebt_qualification_config_inbound"
           ),
           mysqlApi.findOneByField<{ setting_key: string; setting_value: string }>(
-            "homebound_app_settings", "setting_key", "qualification_config_outbound"
+            "tmdebt_app_settings", "setting_key", "tmdebt_qualification_config_outbound"
           ),
         ]);
 
@@ -133,7 +133,7 @@ export const ListIdQualificationSelector = ({
         const data = await mysqlApi.findOneByField<{
           setting_key: string;
           setting_value: string;
-        }>("homebound_app_settings", "setting_key", storageKey);
+        }>("tmdebt_app_settings", "setting_key", storageKey);
 
         if (data?.setting_value) {
           return JSON.parse(data.setting_value);
@@ -174,7 +174,7 @@ export const ListIdQualificationSelector = ({
   const saveMutation = useMutation({
     mutationFn: async (questions: SelectedQuestion[]) => {
       await mysqlApi.upsertByFields(
-        "homebound_app_settings",
+        "tmdebt_app_settings",
         {
           setting_key: storageKey,
           setting_value: JSON.stringify(questions),

@@ -1,7 +1,7 @@
 -- Migration: Add outbound closing steps (closingNotInterested and closingSuccess)
 -- Run this in your Supabase SQL Editor to add the missing outbound closing steps
 
-INSERT INTO public.homebound_script (step_name, title, content) 
+INSERT INTO public.tmdebt_script (step_name, title, content) 
 VALUES 
   (
     'outbound_closingNotInterested', 

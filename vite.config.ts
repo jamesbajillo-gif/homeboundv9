@@ -5,9 +5,14 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Base path for deployment - matches the actual deployment path
+  base: '/ibm_dynamicscript/',
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: [
+      "mytchv1.techpinoy.net"
+    ],
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

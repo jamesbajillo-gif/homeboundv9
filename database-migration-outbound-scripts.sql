@@ -1,6 +1,6 @@
 -- Create outbound scripts (duplicating inbound structure with outbound prefix)
 
-INSERT INTO public.homebound_script (step_name, title, content, button_config) VALUES
+INSERT INTO public.tmdebt_script (step_name, title, content, button_config) VALUES
   ('outbound_greeting', '1 - Opening Greeting (Outbound)', 
    '"Good [morning/afternoon/evening], this is [Your Name] calling from [Company Name]. Am I speaking with [Customer Name]?"
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { Plus, Trash2, Loader2, Check, X, Pencil } from "lucide-react";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { toast } from "sonner";
@@ -53,7 +54,7 @@ interface ObjectionAlternative {
   is_default: number;
 }
 
-const ALTS_TABLE = "homebound_objection_alts";
+const ALTS_TABLE = "tmdebt_objection_alts";
 
 export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionListEditorProps) => {
   const queryClient = useQueryClient();
@@ -69,7 +70,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
   const [deleteTarget, setDeleteTarget] = useState<ListItem | null>(null);
 
   // Determine which table and query key to use
-  const tableName = listId ? "homebound_list_id_config" : "homebound_script";
+  const tableName = listId ? "tmdebt_list_id_config" : "tmdebt_script";
   const queryKey = listId 
     ? ["list-script", listId, stepName] 
     : QUERY_KEYS.scripts.byStep(stepName);
@@ -192,11 +193,11 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
       if (listId) {
         // Save to list ID config table
         const existingConfig = await mysqlApi.findOneByFields<{ name: string }>(
-          "homebound_list_id_config",
+          "tmdebt_list_id_config",
           { list_id: listId }
         );
         
-        await mysqlApi.upsertByFields("homebound_list_id_config", {
+        await mysqlApi.upsertByFields("tmdebt_list_id_config", {
           list_id: listId,
           step_name: stepName,
           title: stepTitle,
@@ -205,7 +206,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
         }, "list_id,step_name");
       } else {
         // Save to default script table
-        await mysqlApi.upsertByFields("homebound_script", {
+        await mysqlApi.upsertByFields("tmdebt_script", {
           step_name: stepName,
           title: stepTitle,
           content,
@@ -230,7 +231,12 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
   };
 
   const handleSaveEdit = async (item: ListItem) => {
-    if (!editText.trim()) {
+    // Check if content is HTML (contains HTML tags)
+    const isHTMLContent = /<[a-z][\s\S]*>/i.test(editText);
+    // For HTML, preserve the structure; for plain text, trim whitespace
+    const textToSave = isHTMLContent ? editText : editText.trim();
+    
+    if (!textToSave) {
       setEditingId(null);
       return;
     }
@@ -239,13 +245,13 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
       await saveAltMutation.mutateAsync({
         script_name: altsScriptName,
         objection_id: item.objectionId,
-        alt_text: editText.trim(),
+        alt_text: textToSave,
         alt_order: item.altOrder,
         is_default: 0,
       });
     } else {
       setItems(prev => prev.map(i => 
-        i.id === item.id ? { ...i, text: editText.trim() } : i
+        i.id === item.id ? { ...i, text: textToSave } : i
       ));
     }
     
@@ -271,7 +277,12 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
   };
 
   const handleAdd = async () => {
-    if (!newText.trim()) return;
+    // Check if content is HTML (contains HTML tags)
+    const isHTMLContent = /<[a-z][\s\S]*>/i.test(newText);
+    // For HTML, preserve the structure; for plain text, trim whitespace
+    const textToSave = isHTMLContent ? newText : newText.trim();
+    
+    if (!textToSave) return;
     
     // Find the base objection to add alternative to
     const baseObjection = items.find(i => i.type === 'objection');
@@ -284,7 +295,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
       await saveAltMutation.mutateAsync({
         script_name: altsScriptName,
         objection_id: baseObjection.objectionId!,
-        alt_text: newText.trim(),
+        alt_text: textToSave,
         alt_order: nextOrder,
         is_default: 0,
       });
@@ -292,7 +303,7 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
       // No base objection exists, create it
       setItems(prev => [...prev, {
         id: 'objection_0',
-        text: newText.trim(),
+        text: textToSave,
         type: 'objection',
         objectionId: 'objection_0',
       }]);
@@ -341,18 +352,24 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
       {/* Add new item form */}
       {isAdding && (
         <div className="flex gap-2 mb-3">
-          <Textarea
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            placeholder="Enter objection response..."
-            className="flex-1 min-h-[80px]"
-            autoFocus
-          />
+          <div className="flex-1">
+            <RichTextEditor
+              value={newText}
+              onChange={setNewText}
+              placeholder="Enter objection response..."
+              className="min-h-[80px]"
+              autoFocus
+            />
+          </div>
           <div className="flex flex-col gap-1">
             <Button size="icon" variant="ghost" onClick={() => setIsAdding(false)}>
               <X className="h-4 w-4" />
             </Button>
-            <Button size="icon" onClick={handleAdd} disabled={!newText.trim()}>
+            <Button 
+              size="icon" 
+              onClick={handleAdd} 
+              disabled={!newText || (!/<[a-z][\s\S]*>/i.test(newText) && !newText.trim())}
+            >
               <Check className="h-4 w-4" />
             </Button>
           </div>
@@ -377,15 +394,18 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
                 <span className="text-sm font-medium text-muted-foreground shrink-0 mt-2">
                   #{index + 1}
                 </span>
-                <Textarea
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  className="flex-1 text-sm min-h-[80px]"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setEditingId(null);
-                  }}
-                />
+                <div className="flex-1">
+                  <RichTextEditor
+                    value={editText}
+                    onChange={setEditText}
+                    placeholder="Enter objection response..."
+                    className="min-h-[80px]"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                  />
+                </div>
                 <div className="flex flex-col gap-1">
                   <Button size="icon" variant="ghost" onClick={() => setEditingId(null)}>
                     <X className="h-4 w-4" />
@@ -400,7 +420,14 @@ export const ObjectionListEditor = ({ stepName, stepTitle, listId }: ObjectionLi
                 <span className="text-sm font-medium text-muted-foreground shrink-0">
                   #{index + 1}
                 </span>
-                <pre className="flex-1 text-sm whitespace-pre-wrap font-sans">{item.text}</pre>
+                {/<[a-z][\s\S]*>/i.test(item.text) ? (
+                  <div 
+                    className="flex-1 text-sm prose prose-sm max-w-none [&_code]:font-mono [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_pre]:font-mono [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded-md [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
+                    dangerouslySetInnerHTML={{ __html: item.text }}
+                  />
+                ) : (
+                  <pre className="flex-1 text-sm whitespace-pre-wrap font-sans">{item.text}</pre>
+                )}
                 {/* Edit and delete buttons - hidden for standard user (001) */}
                 {!isStandardUser && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

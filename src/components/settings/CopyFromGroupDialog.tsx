@@ -61,7 +61,7 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
     try {
       // Get the name for the list ID (required field)
       const existingConfig = await mysqlApi.findOneByFields<{ name: string }>(
-        "homebound_list_id_config",
+        "tmdebt_list_id_config",
         { list_id: listId }
       );
       const listName = existingConfig?.name || listId;
@@ -72,14 +72,14 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
           try {
             // Fetch source script
             const sourceScript = await mysqlApi.findOneByFields<ScriptData>(
-              "homebound_script",
+              "tmdebt_script",
               { step_name: stepName }
             );
             
             if (sourceScript) {
               // Upsert to list ID config
               await mysqlApi.upsertByFields(
-                "homebound_list_id_config",
+                "tmdebt_list_id_config",
                 {
                   list_id: listId,
                   step_name: stepName,
@@ -101,7 +101,7 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
         try {
           // Fetch source custom tabs
           const sourceTabs = await mysqlApi.findByField<CustomTabData & { id: number }>(
-            "homebound_custom_tabs",
+            "tmdebt_custom_tabs",
             "group_type",
             sourceGroup,
             { orderBy: "display_order", order: "ASC" }
@@ -115,7 +115,7 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
             
             try {
               // Create in listid custom tabs table
-              await mysqlApi.create("homebound_listid_custom_tabs", {
+              await mysqlApi.create("tmdebt_listid_custom_tabs", {
                 list_id: listId,
                 tab_key: newTabKey,
                 tab_title: tab.tab_title,
@@ -125,13 +125,13 @@ export const CopyFromGroupDialog = ({ listId, onCopyComplete }: CopyFromGroupDia
 
               // Copy the script content too
               const tabScript = await mysqlApi.findOneByFields<ScriptData>(
-                "homebound_script",
+                "tmdebt_script",
                 { step_name: tab.tab_key }
               );
 
               if (tabScript) {
                 await mysqlApi.upsertByFields(
-                  "homebound_list_id_config",
+                  "tmdebt_list_id_config",
                   {
                     list_id: listId,
                     step_name: newTabKey,

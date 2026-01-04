@@ -39,14 +39,14 @@ export const QualificationFormSettings = () => {
     fieldId: string;
     options: Array<{ value: string; label: string }>;
   } | null>(null);
-  const accessLevel = localStorage.getItem('settings_access_level') || 'kainkatae';
+  const accessLevel = localStorage.getItem('tmdebt_settings_access_level') || 'kainkatae';
 
   // Fetch fields using React Query
   const { data: fields = [], isLoading: loading } = useQuery({
     queryKey: QUERY_KEYS.formFields.all,
     queryFn: async () => {
       const data = await mysqlApi.getAll<FormField>(
-        "homebound_qualification_form_fields",
+        "tmdebt_qualification_form_fields",
         {
           orderBy: "display_order",
           order: "ASC"
@@ -61,7 +61,7 @@ export const QualificationFormSettings = () => {
       setSaving(true);
 
       await mysqlApi.updateById(
-        "homebound_qualification_form_fields",
+        "tmdebt_qualification_form_fields",
         field.id,
         {
           field_label: field.field_label,
@@ -89,7 +89,7 @@ export const QualificationFormSettings = () => {
   const handleToggleActive = async (fieldId: string | number, currentState: boolean) => {
     try {
       await mysqlApi.updateById(
-        "homebound_qualification_form_fields",
+        "tmdebt_qualification_form_fields",
         fieldId,
         { is_active: !currentState }
       );
@@ -122,7 +122,7 @@ export const QualificationFormSettings = () => {
       setSaving(true);
 
       await mysqlApi.updateById(
-        "homebound_qualification_form_fields",
+        "tmdebt_qualification_form_fields",
         fieldId,
         {
           field_options: { options: newOptions }

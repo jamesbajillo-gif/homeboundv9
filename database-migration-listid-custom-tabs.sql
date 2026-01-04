@@ -1,7 +1,7 @@
 -- Migration script to add custom tabs support for List ID configurations
 -- Run this SQL in your MySQL database to enable custom tabs for List IDs
 
-CREATE TABLE IF NOT EXISTS homebound_listid_custom_tabs (
+CREATE TABLE IF NOT EXISTS tmdebt_listid_custom_tabs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     list_id VARCHAR(255) NOT NULL,
     tab_key VARCHAR(100) NOT NULL UNIQUE,

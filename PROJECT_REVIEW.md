@@ -52,9 +52,9 @@
 #### 4. **Missing React Query Keys**
 
 **Problem**: No standardized query keys for:
-- Scripts (`homebound_script`)
-- Form fields (`homebound_qualification_form_fields`)
-- Zapier webhooks (`homebound_zapier_settings`)
+- Scripts (`tmdebt_script`)
+- Form fields (`tmdebt_qualification_form_fields`)
+- Zapier webhooks (`tmdebt_zapier_settings`)
 
 **Impact**: Cannot invalidate related queries efficiently
 

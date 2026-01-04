@@ -24,16 +24,16 @@ export const UserGroupSettings = () => {
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [isDisabled, setIsDisabled] = useState(false);
-  const accessLevel = localStorage.getItem('settings_access_level') || 'kainkatae';
+  const accessLevel = localStorage.getItem('tmdebt_settings_access_level') || 'kainkatae';
 
   useEffect(() => {
     fetchUserGroups();
     // Load disabled state from localStorage, default to disabled (true)
-    const savedDisabledState = localStorage.getItem('spiel_groups_disabled');
+    const savedDisabledState = localStorage.getItem('tmdebt_spiel_groups_disabled');
     if (savedDisabledState === null) {
       // First time - default to disabled
       setIsDisabled(true);
-      localStorage.setItem('spiel_groups_disabled', 'true');
+      localStorage.setItem('tmdebt_spiel_groups_disabled', 'true');
     } else {
       setIsDisabled(savedDisabledState === 'true');
     }
@@ -42,7 +42,7 @@ export const UserGroupSettings = () => {
   const fetchUserGroups = async () => {
     try {
       setLoading(true);
-      const data = await mysqlApi.getAll<UserGroup>("homebound_user_groups");
+      const data = await mysqlApi.getAll<UserGroup>("tmdebt_user_groups");
       
       // Sort by id descending (newest first)
       const sortedData = data.sort((a, b) => b.id - a.id);
@@ -64,7 +64,7 @@ export const UserGroupSettings = () => {
     try {
       setAdding(true);
 
-      await mysqlApi.create("homebound_user_groups", {
+      await mysqlApi.create("tmdebt_user_groups", {
         user_identifier: newUserIdentifier.trim(),
         group_type: newGroupType,
       });
@@ -87,7 +87,7 @@ export const UserGroupSettings = () => {
 
   const handleRemoveUser = async (id: number, userIdentifier: string) => {
     try {
-      await mysqlApi.deleteById("homebound_user_groups", id);
+      await mysqlApi.deleteById("tmdebt_user_groups", id);
 
       toast.success(`User "${userIdentifier}" removed successfully!`);
       fetchUserGroups();
@@ -133,7 +133,7 @@ export const UserGroupSettings = () => {
           onCheckedChange={(checked) => {
             const newValue = checked as boolean;
             setIsDisabled(newValue);
-            localStorage.setItem('spiel_groups_disabled', String(newValue));
+            localStorage.setItem('tmdebt_spiel_groups_disabled', String(newValue));
             toast.success(newValue ? 'Spiel group assignments disabled' : 'Spiel group assignments enabled');
           }}
         />

@@ -35,6 +35,7 @@ import {
 interface QualificationScriptSelectorProps {
   stepName: string; // e.g., "outbound_qualification" or "qualification"
   stepTitle: string;
+  listId?: string; // Optional list ID for list ID-specific qualification configs
 }
 
 interface SelectedQuestionAlt {
@@ -54,11 +55,12 @@ interface SelectedQuestion {
   order: number;
 }
 
-const STORAGE_KEY_PREFIX = "qualification_script_selected";
+const STORAGE_KEY_PREFIX = "tmdebt_qualification_script_selected";
 
 export const QualificationScriptSelector = ({
   stepName,
   stepTitle,
+  listId,
 }: QualificationScriptSelectorProps) => {
   const queryClient = useQueryClient();
   const [selectedQuestions, setSelectedQuestions] = useState<SelectedQuestion[]>([]);
@@ -67,12 +69,16 @@ export const QualificationScriptSelector = ({
   const [editingQuestion, setEditingQuestion] = useState<SelectedQuestion | null>(null);
   const [newAltText, setNewAltText] = useState("");
   const [pendingSelections, setPendingSelections] = useState<Set<string>>(new Set());
-  const storageKey = `${STORAGE_KEY_PREFIX}_${stepName}`;
+  
+  // Build storage key - use list ID-specific key if listId is provided
+  const storageKey = listId && listId !== '--A--list_id--B--'
+    ? `tmdebt_qualification_script_selected_listid_${listId}`
+    : `${STORAGE_KEY_PREFIX}_${stepName}`;
 
   // Determine the config key based on stepName
   const configKey = stepName.includes("outbound")
-    ? "qualification_config_outbound"
-    : "qualification_config_inbound";
+    ? "tmdebt_qualification_config_outbound"
+    : "tmdebt_qualification_config_inbound";
 
   // Fetch the master questionnaire config from /settings/forms
   const { data: masterConfig, isLoading: configLoading } = useQuery({
@@ -82,7 +88,7 @@ export const QualificationScriptSelector = ({
         const configData = await mysqlApi.findOneByField<{
           setting_key: string;
           setting_value: string;
-        }>("homebound_app_settings", "setting_key", configKey);
+        }>("tmdebt_app_settings", "setting_key", configKey);
 
         if (configData?.setting_value) {
           const parsed = deserializeConfig(configData.setting_value);
@@ -105,7 +111,7 @@ export const QualificationScriptSelector = ({
         const data = await mysqlApi.findOneByField<{
           setting_key: string;
           setting_value: string;
-        }>("homebound_app_settings", "setting_key", storageKey);
+        }>("tmdebt_app_settings", "setting_key", storageKey);
 
         if (data?.setting_value) {
           return JSON.parse(data.setting_value);
@@ -147,7 +153,7 @@ export const QualificationScriptSelector = ({
   const saveMutation = useMutation({
     mutationFn: async (questions: SelectedQuestion[]) => {
       await mysqlApi.upsertByFields(
-        "homebound_app_settings",
+        "tmdebt_app_settings",
         {
           setting_key: storageKey,
           setting_value: JSON.stringify(questions),

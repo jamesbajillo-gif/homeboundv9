@@ -5,7 +5,7 @@
 
 -- Custom Tabs Table
 -- Stores custom tab configurations for inbound/outbound scripts
-CREATE TABLE IF NOT EXISTS homebound_custom_tabs (
+CREATE TABLE IF NOT EXISTS tmdebt_custom_tabs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     tab_key VARCHAR(100) NOT NULL UNIQUE,
     tab_title VARCHAR(255) NOT NULL,
@@ -20,5 +20,5 @@ CREATE TABLE IF NOT EXISTS homebound_custom_tabs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Note: When a custom tab is created, a corresponding entry is also
--- automatically added to the homebound_script table with the tab_key
+-- automatically added to the tmdebt_script table with the tab_key
 -- as the step_name. This ensures script content storage works seamlessly.

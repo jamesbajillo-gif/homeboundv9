@@ -1,24 +1,25 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { QualificationForm } from "@/components/QualificationForm";
-import { ObjectionDisplay } from "@/components/ObjectionDisplay";
 import { SpielDisplay } from "@/components/SpielDisplay";
+import { QualificationForm } from "@/components/QualificationForm";
 import { mysqlApi } from "@/lib/mysqlApi";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { Loader2, Phone, ClipboardCheck, MessageSquare, XCircle, CheckCircle, FileText } from "lucide-react";
+import { Loader2, Phone, FileText, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
 import { useGroup } from "@/contexts/GroupContext";
 import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryKeys";
-import { Separator } from "@/components/ui/separator";
 import { ScriptNavigation } from "./ScriptNavigation";
 import { useTabVisibility } from "@/hooks/useTabVisibility";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { useCustomTabs } from "@/hooks/useCustomTabs";
+import { useListIdTabVisibility } from "@/hooks/useListIdTabVisibility";
+import { useListIdTabOrder } from "@/hooks/useListIdTabOrder";
+import { useListIdCustomTabs } from "@/hooks/useListIdCustomTabs";
 
-type ScriptStep = "greeting" | "qualification" | "objectionHandling" | "closingNotInterested" | "closingSuccess";
+type ScriptStep = "greeting";
 
 interface SectionConfig {
   id: string;
@@ -28,6 +29,9 @@ interface SectionConfig {
   color: string;
   isCustom?: boolean;
   stepName?: string;
+  isQuestionnaire?: boolean;
+  questionnaireScriptName?: string;
+  selectedSectionIds?: string[];
 }
 
 interface ScriptDisplayProps {
@@ -37,19 +41,31 @@ interface ScriptDisplayProps {
 // Define the order and metadata for each section with visibility keys
 const INBOUND_FIXED_SECTIONS: SectionConfig[] = [
   { id: "greeting", visibilityKey: "inbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500", stepName: "greeting" },
-  { id: "qualification", visibilityKey: "inbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500", stepName: "inbound_qualification" },
-  { id: "objectionHandling", visibilityKey: "inbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500", stepName: "objectionHandling" },
-  { id: "closingNotInterested", visibilityKey: "inbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500", stepName: "closingNotInterested" },
-  { id: "closingSuccess", visibilityKey: "inbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500", stepName: "closingSuccess" },
+  { 
+    id: "qualification", 
+    visibilityKey: "inbound_qualification", 
+    title: "Qualification Form", 
+    icon: ClipboardList, 
+    color: "text-green-500", 
+    stepName: "qualification",
+    isQuestionnaire: true,
+    questionnaireScriptName: "inbound_qualification"
+  },
 ];
 
 // Outbound section config with different visibility keys
 const OUTBOUND_FIXED_SECTIONS: SectionConfig[] = [
   { id: "greeting", visibilityKey: "outbound_greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500", stepName: "outbound_greeting" },
-  { id: "qualification", visibilityKey: "outbound_qualification", title: "Qualification", icon: ClipboardCheck, color: "text-purple-500", stepName: "outbound_qualification" },
-  { id: "objectionHandling", visibilityKey: "outbound_objection", title: "Objection Handling", icon: MessageSquare, color: "text-amber-500", stepName: "outbound_objection" },
-  { id: "closingNotInterested", visibilityKey: "outbound_closingNotInterested", title: "Closing - Not Interested", icon: XCircle, color: "text-red-500", stepName: "outbound_closingNotInterested" },
-  { id: "closingSuccess", visibilityKey: "outbound_closingSuccess", title: "Closing - Success", icon: CheckCircle, color: "text-green-500", stepName: "outbound_closingSuccess" },
+  { 
+    id: "qualification", 
+    visibilityKey: "outbound_qualification", 
+    title: "Qualification Form", 
+    icon: ClipboardList, 
+    color: "text-green-500", 
+    stepName: "outbound_qualification",
+    isQuestionnaire: true,
+    questionnaireScriptName: "outbound_qualification"
+  },
 ];
 
 export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) => {
@@ -62,18 +78,79 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
   const { leadData } = useVICI();
   const viciListId = leadData?.list_id;
   
-  // Get visibility, order, and custom tabs based on group type
-  const { isTabVisible, isLoading: visibilityLoading } = useTabVisibility(groupType);
-  const { getOrderedTabs, isLoading: orderLoading } = useTabOrder(groupType);
-  const { tabs: customTabs, isLoading: customTabsLoading } = useCustomTabs(groupType);
+  // Get visibility, order, and custom tabs - use list ID specific hooks if list ID scripts are active
+  // Note: We need to check usingListIdScripts, but it's set later. So we'll use both hooks conditionally
+  // and switch based on the actual state after it's determined
+  
+  // Default (inbound/outbound) hooks
+  const { isTabVisible: isTabVisibleDefault, isLoading: visibilityLoadingDefault } = useTabVisibility(groupType);
+  const { getOrderedTabs: getOrderedTabsDefault, isLoading: orderLoadingDefault } = useTabOrder(groupType);
+  const { tabs: customTabsDefault, isLoading: customTabsLoadingDefault } = useCustomTabs(groupType);
+  
+  // List ID specific hooks (only enabled when we have a valid list ID)
+  const validListId = viciListId && !viciListId.includes('--A--') ? viciListId : null;
+  const { isTabVisible: isTabVisibleListId, isLoading: visibilityLoadingListId } = useListIdTabVisibility(validListId || "");
+  const { getOrderedTabs: getOrderedTabsListId, isLoading: orderLoadingListId } = useListIdTabOrder(validListId || "");
+  const { tabs: customTabsListId, isLoading: customTabsLoadingListId } = useListIdCustomTabs(validListId || "");
   
   // Get the fixed section config based on group type
   const fixedSections = groupType === "outbound" ? OUTBOUND_FIXED_SECTIONS : INBOUND_FIXED_SECTIONS;
   
+  // Helper function to safely parse selected_section_ids
+  const parseSelectedSectionIds = (sectionIds: string | undefined): string[] | undefined => {
+    if (!sectionIds) return undefined;
+    try {
+      // If it's already an array, return it
+      if (Array.isArray(sectionIds)) return sectionIds;
+      // If it's a string, try to parse it
+      if (typeof sectionIds === 'string') {
+        const parsed = JSON.parse(sectionIds);
+        return Array.isArray(parsed) ? parsed : undefined;
+      }
+      return undefined;
+    } catch (error) {
+      console.error('Error parsing selected_section_ids:', error);
+      return undefined;
+    }
+  };
+
+  // Define fixed sections for list IDs (without inbound/outbound prefix)
+  const LIST_ID_FIXED_SECTIONS: SectionConfig[] = [
+    { id: "greeting", visibilityKey: "greeting", title: "Opening Spiel", icon: Phone, color: "text-blue-500", stepName: "greeting" },
+    { 
+      id: "qualification", 
+      visibilityKey: "qualification", 
+      title: "Qualification Form", 
+      icon: ClipboardList, 
+      color: "text-green-500", 
+      stepName: "qualification",
+      isQuestionnaire: true,
+      questionnaireScriptName: "qualification"
+    },
+  ];
+
+  // Determine which hooks to use based on whether we have a valid list ID
+  // We'll check this early to determine which custom tabs to load
+  const hasValidListId = viciListId && !viciListId.includes('--A--');
+  
+  // Use list ID hooks if we have a valid list ID, otherwise use default hooks
+  // Note: We'll refine this after scripts are loaded to check if list ID scripts actually exist
+  // For now, we'll use list ID hooks if we have a valid list ID
+  const isTabVisibleHook = hasValidListId ? isTabVisibleListId : isTabVisibleDefault;
+  const getOrderedTabsHook = hasValidListId ? getOrderedTabsListId : getOrderedTabsDefault;
+  const customTabsHook = hasValidListId ? customTabsListId : customTabsDefault;
+  const visibilityLoadingHook = hasValidListId ? visibilityLoadingListId : visibilityLoadingDefault;
+  const orderLoadingHook = hasValidListId ? orderLoadingListId : orderLoadingDefault;
+  const customTabsLoadingHook = hasValidListId ? customTabsLoadingListId : customTabsLoadingDefault;
+
   // Combine fixed and custom sections, then filter by visibility and order
-  const visibleSections = useMemo(() => {
+  // Use hook versions initially for early rendering
+  const initialVisibleSections = useMemo(() => {
+    // Use list ID fixed sections if we have a valid list ID, otherwise use group type sections
+    const sectionsToUse = hasValidListId ? LIST_ID_FIXED_SECTIONS : fixedSections;
+    
     // Map custom tabs to section format
-    const customSections: SectionConfig[] = customTabs.map(tab => ({
+    const customSections: SectionConfig[] = customTabsHook.map(tab => ({
       id: tab.tab_key,
       visibilityKey: tab.tab_key,
       title: tab.tab_title,
@@ -81,21 +158,25 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
       color: "text-slate-500",
       isCustom: true,
       stepName: tab.tab_key,
+      isQuestionnaire: tab.tab_type === "questionnaire",
+      questionnaireScriptName: tab.questionnaire_script_name,
+      selectedSectionIds: parseSelectedSectionIds(tab.selected_section_ids),
     }));
     
     // Combine all sections
-    const allSections = [...fixedSections, ...customSections];
+    const allSections = [...sectionsToUse, ...customSections];
     
     // Filter by visibility
-    const visible = allSections.filter(section => isTabVisible(section.visibilityKey));
+    const visible = allSections.filter(section => isTabVisibleHook(section.visibilityKey));
     
     // Map to have a 'key' property for getOrderedTabs
     const withKey = visible.map(s => ({ ...s, key: s.visibilityKey }));
-    const ordered = getOrderedTabs(withKey);
+    const ordered = getOrderedTabsHook(withKey);
     return ordered;
-  }, [fixedSections, customTabs, isTabVisible, getOrderedTabs]);
+  }, [fixedSections, customTabsHook, isTabVisibleHook, getOrderedTabsHook, hasValidListId]);
   
-  const [activeSection, setActiveSection] = useState<string>(visibleSections[0]?.id || "greeting");
+  // Use initialVisibleSections for initial state, will be updated when finalVisibleSections is computed
+  const [activeSection, setActiveSection] = useState<string>("greeting");
 
   // Handle navigation to a section (smooth scroll)
   const handleNavigate = useCallback((sectionId: string) => {
@@ -110,12 +191,13 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     }
   }, []);
 
-  // Update active section when visible sections change
+  // Update active section when visible sections change - use initialVisibleSections initially
   useEffect(() => {
-    if (visibleSections.length > 0 && !visibleSections.find(s => s.id === activeSection)) {
-      setActiveSection(visibleSections[0].id);
+    const sections = initialVisibleSections;
+    if (sections.length > 0 && !sections.find(s => s.id === activeSection)) {
+      setActiveSection(sections[0].id);
     }
-  }, [visibleSections, activeSection]);
+  }, [initialVisibleSections, activeSection]);
 
   // Track scroll position to update active section
   useEffect(() => {
@@ -126,11 +208,12 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
       const containerHeight = container.offsetHeight;
       const scrollPosition = container.scrollTop + containerHeight / 3;
       
-      for (let i = visibleSections.length - 1; i >= 0; i--) {
-        const element = document.getElementById(visibleSections[i].id);
+      const sections = finalVisibleSections.length > 0 ? finalVisibleSections : initialVisibleSections;
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const element = document.getElementById(sections[i].id);
         if (element && element.offsetTop - container.offsetTop <= scrollPosition) {
-          if (visibleSections[i].id !== activeSection) {
-            setActiveSection(visibleSections[i].id);
+          if (sections[i].id !== activeSection) {
+            setActiveSection(sections[i].id);
           }
           break;
         }
@@ -139,35 +222,36 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [activeSection, visibleSections]);
+  }, [activeSection, finalVisibleSections, initialVisibleSections]);
 
   // Keyboard navigation (up/down arrows)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const currentIndex = visibleSections.findIndex(s => s.id === activeSection);
+      const sections = finalVisibleSections.length > 0 ? finalVisibleSections : initialVisibleSections;
+      const currentIndex = sections.findIndex(s => s.id === activeSection);
       
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
         e.preventDefault();
-        const nextIndex = Math.min(currentIndex + 1, visibleSections.length - 1);
-        handleNavigate(visibleSections[nextIndex].id);
+        const nextIndex = Math.min(currentIndex + 1, sections.length - 1);
+        handleNavigate(sections[nextIndex].id);
       } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
         e.preventDefault();
         const prevIndex = Math.max(currentIndex - 1, 0);
-        handleNavigate(visibleSections[prevIndex].id);
+        handleNavigate(sections[prevIndex].id);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeSection, handleNavigate, visibleSections]);
+  }, [activeSection, handleNavigate, finalVisibleSections, initialVisibleSections]);
 
   // Fetch scripts using React Query - auto-refreshes when cache is invalidated or custom tabs change
   const { data: fetchedScriptData, isLoading: loading } = useQuery({
-    queryKey: ['scripts', 'display', groupType, viciListId, customTabs.map(t => t.tab_key).join(',')],
+    queryKey: ['scripts', 'display', groupType, viciListId, customTabsHook.map(t => t.tab_key).join(',')],
     queryFn: async () => {
       return await fetchScriptDataInternal();
     },
-    enabled: !!groupType && !customTabsLoading,
+    enabled: !!groupType && !customTabsLoadingHook,
     staleTime: 30000, // 30 seconds - prevents unnecessary refetches
   });
 
@@ -181,14 +265,54 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     }
   }, [fetchedScriptData]);
 
-  // Helper: Check if all 5 required script steps are present
+  // Determine which hooks to use based on whether we're actually using list ID scripts
+  // This is determined after scripts are loaded
+  const isTabVisible = (usingListIdScripts && activeListId) ? isTabVisibleListId : isTabVisibleDefault;
+  const getOrderedTabs = (usingListIdScripts && activeListId) ? getOrderedTabsListId : getOrderedTabsDefault;
+  const customTabs = (usingListIdScripts && activeListId) ? customTabsListId : customTabsDefault;
+  const visibilityLoading = (usingListIdScripts && activeListId) ? visibilityLoadingListId : visibilityLoadingDefault;
+  const orderLoading = (usingListIdScripts && activeListId) ? orderLoadingListId : orderLoadingDefault;
+  const customTabsLoading = (usingListIdScripts && activeListId) ? customTabsLoadingListId : customTabsLoadingDefault;
+
+  // Recompute visibleSections when usingListIdScripts or activeListId changes
+  // This ensures we use the correct tabs after scripts are loaded
+  const finalVisibleSections = useMemo(() => {
+    // Use list ID fixed sections if we're using list ID scripts, otherwise use group type sections
+    const sectionsToUse = (usingListIdScripts && activeListId) ? LIST_ID_FIXED_SECTIONS : fixedSections;
+    
+    // Map custom tabs to section format
+    const customSections: SectionConfig[] = customTabs.map(tab => ({
+      id: tab.tab_key,
+      visibilityKey: tab.tab_key,
+      title: tab.tab_title,
+      icon: FileText,
+      color: "text-slate-500",
+      isCustom: true,
+      stepName: tab.tab_key,
+      isQuestionnaire: tab.tab_type === "questionnaire",
+      questionnaireScriptName: tab.questionnaire_script_name,
+      selectedSectionIds: parseSelectedSectionIds(tab.selected_section_ids),
+    }));
+    
+    // Combine all sections
+    const allSections = [...sectionsToUse, ...customSections];
+    
+    // Filter by visibility
+    const visible = allSections.filter(section => isTabVisible(section.visibilityKey));
+    
+    // Map to have a 'key' property for getOrderedTabs
+    const withKey = visible.map(s => ({ ...s, key: s.visibilityKey }));
+    const ordered = getOrderedTabs(withKey);
+    return ordered;
+  }, [fixedSections, customTabs, isTabVisible, getOrderedTabs, usingListIdScripts, activeListId]);
+
+  // Use finalVisibleSections if available (after scripts load), otherwise use initialVisibleSections
+  const visibleSections = finalVisibleSections.length > 0 ? finalVisibleSections : initialVisibleSections;
+
+  // Helper: Check if required script step is present
   const isCompleteScriptSet = (scripts: Record<string, any>) => {
     const requiredSteps: ScriptStep[] = [
-      'greeting',
-      'qualification',
-      'objectionHandling',
-      'closingNotInterested',
-      'closingSuccess'
+      'greeting'
     ];
     return requiredSteps.every(step => scripts[step]);
   };
@@ -198,14 +322,10 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
     const prefix = groupType === "outbound" ? "outbound_" : "";
     const stepMapping: Record<string, string> = {
       greeting: `${prefix}greeting`,
-      objectionHandling: `${prefix}${groupType === "outbound" ? "objection" : "objectionHandling"}`,
-      qualification: `${prefix}qualification`,
-      closingNotInterested: `${prefix}closingNotInterested`,
-      closingSuccess: `${prefix}closingSuccess`,
     };
     
-    // Add custom tab step names to fetch
-    const customStepNames = customTabs.map(tab => tab.tab_key);
+    // Add custom tab step names to fetch - use hook version since this is called before customTabs is defined
+    const customStepNames = customTabsHook.map(tab => tab.tab_key);
     const allStepNames = [...Object.values(stepMapping), ...customStepNames];
 
     const defaultData = await mysqlApi.findByFieldIn<{
@@ -213,7 +333,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
       title: string;
       content: string;
     }>(
-      "homebound_script",
+      "tmdebt_script",
       "step_name",
       allStepNames
     );
@@ -254,7 +374,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
         content: string;
         name: string;
       }>(
-        "homebound_list_id_config",
+        "tmdebt_list_id_config",
         "list_id",
         viciListId
       );
@@ -356,13 +476,14 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {visibleSections.map((section, index) => {
-            const sectionData = scriptData[section.id];
+            const sectionData = scriptData?.[section.id];
             const Icon = section.icon;
             const processedContent = sectionData 
               ? replaceScriptVariables(sectionData.content, leadData) 
               : '';
 
-            if (!sectionData) return null;
+            // Questionnaire sections don't need scriptData, they render QualificationForm
+            if (!section.isQuestionnaire && !sectionData) return null;
 
             return (
               <div 
@@ -372,7 +493,7 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
               >
                 <Card 
                   className="border-l-4 shadow-sm transition-all duration-300 min-h-[calc(100vh-200px)]"
-                  style={{ borderLeftColor: `hsl(var(--${section.id === 'greeting' ? 'primary' : section.id === 'qualification' ? 'primary' : section.id === 'objectionHandling' ? 'warning' : section.id === 'closingNotInterested' ? 'destructive' : 'success'}))` }}
+                  style={{ borderLeftColor: `hsl(var(--primary))` }}
                 >
                   <CardHeader className="pb-2 md:pb-3">
                     <div className="flex items-center gap-2 md:gap-3">
@@ -392,47 +513,27 @@ export const ScriptDisplay = ({ onQualificationSubmitRef }: ScriptDisplayProps) 
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    {section.id === "qualification" ? (
-                      <>
-                        <div className="prose prose-sm md:prose-base max-w-none mb-6 md:mb-8">
-                          <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base md:text-lg leading-relaxed md:leading-loose text-foreground">
-                            {processedContent}
-                          </pre>
-                        </div>
-                        <Separator className="my-4 md:my-6" />
-                        <QualificationForm 
-                          onSubmitRef={onQualificationSubmitRef}
-                        />
-                      </>
-                    ) : section.id === "objectionHandling" ? (
-                      <ObjectionDisplay 
-                        content={sectionData?.content || ""} 
-                        stepName={groupType === "outbound" ? "outbound_objection" : "objection"}
-                        accentColor="border-amber-500" 
+                    {section.isQuestionnaire && section.questionnaireScriptName ? (
+                      <QualificationForm 
+                        scriptName={section.questionnaireScriptName}
+                        selectedSectionIds={section.selectedSectionIds}
+                        listId={usingListIdScripts ? activeListId : undefined}
                       />
                     ) : section.id === "greeting" ? (
                       <SpielDisplay 
                         content={sectionData?.content || ""} 
                         stepName={section.stepName || "greeting"}
-                        accentColor="border-blue-500" 
-                      />
-                    ) : section.id === "closingNotInterested" ? (
-                      <SpielDisplay 
-                        content={sectionData?.content || ""} 
-                        stepName={section.stepName || "closingNotInterested"}
-                        accentColor="border-red-500" 
-                      />
-                    ) : section.id === "closingSuccess" ? (
-                      <SpielDisplay 
-                        content={sectionData?.content || ""} 
-                        stepName={section.stepName || "closingSuccess"}
-                        accentColor="border-green-500" 
+                        accentColor="border-blue-500"
+                        listId={usingListIdScripts ? activeListId : null}
+                        stepTitle={sectionData?.title || section.title}
                       />
                     ) : section.isCustom ? (
                       <SpielDisplay 
                         content={sectionData?.content || ""} 
                         stepName={section.stepName || section.id}
-                        accentColor="border-slate-500" 
+                        accentColor="border-slate-500"
+                        listId={usingListIdScripts ? activeListId : null}
+                        stepTitle={sectionData?.title || section.title}
                       />
                     ) : (
                       <div className="prose prose-sm md:prose-base max-w-none">

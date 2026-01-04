@@ -10,15 +10,18 @@ export interface CustomTab {
   group_type: "inbound" | "outbound";
   display_order: number;
   is_active: number;
+  tab_type?: "script" | "questionnaire";
+  questionnaire_script_name?: string;
+  selected_section_ids?: string; // JSON array of section IDs
   created_at?: string;
   updated_at?: string;
 }
 
-const TABLE_NAME = "homebound_custom_tabs";
+const TABLE_NAME = "tmdebt_custom_tabs";
 
 /**
  * Hook to manage custom script tabs.
- * Each custom tab creates a corresponding entry in homebound_script table.
+ * Each custom tab creates a corresponding entry in tmdebt_script table.
  */
 export const useCustomTabs = (groupType: "inbound" | "outbound") => {
   const queryClient = useQueryClient();
@@ -46,7 +49,17 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
 
   // Create a new tab
   const createMutation = useMutation({
-    mutationFn: async ({ tabTitle }: { tabTitle: string }) => {
+    mutationFn: async ({ 
+      tabTitle, 
+      tabType = "script", 
+      questionnaireScriptName,
+      selectedSectionIds
+    }: { 
+      tabTitle: string;
+      tabType?: "script" | "questionnaire";
+      questionnaireScriptName?: string;
+      selectedSectionIds?: string[];
+    }) => {
       // Generate a unique tab key
       const tabKey = `${groupType}_custom_${Date.now()}`;
       
@@ -61,21 +74,36 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
         : 1;
 
       // Create the custom tab entry
-      await mysqlApi.create(TABLE_NAME, {
+      const tabData: any = {
         tab_key: tabKey,
         tab_title: tabTitle,
         group_type: groupType,
         display_order: nextOrder,
         is_active: 1,
-      });
+      };
 
-      // Also create the script entry for this tab
-      await mysqlApi.upsertByFields("homebound_script", {
-        step_name: tabKey,
-        title: tabTitle,
-        content: "",
-        button_config: JSON.stringify([]),
-      });
+      // Add questionnaire fields if it's a questionnaire tab
+      if (tabType === "questionnaire" && questionnaireScriptName) {
+        tabData.tab_type = "questionnaire";
+        tabData.questionnaire_script_name = questionnaireScriptName;
+        if (selectedSectionIds && selectedSectionIds.length > 0) {
+          tabData.selected_section_ids = JSON.stringify(selectedSectionIds);
+        }
+      } else {
+        tabData.tab_type = "script";
+      }
+
+      await mysqlApi.create(TABLE_NAME, tabData);
+
+      // Only create script entry for script tabs
+      if (tabType === "script") {
+        await mysqlApi.upsertByFields("tmdebt_script", {
+          step_name: tabKey,
+          title: tabTitle,
+          content: "",
+          button_config: JSON.stringify([]),
+        });
+      }
 
       return tabKey;
     },
@@ -98,7 +126,7 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
       });
 
       // Also update the script title
-      await mysqlApi.updateByField("homebound_script", "step_name", tabKey, {
+      await mysqlApi.updateByField("tmdebt_script", "step_name", tabKey, {
         title: tabTitle,
       });
     },
@@ -129,16 +157,77 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
     },
   });
 
-  const createTab = async (tabTitle: string) => {
-    return await createMutation.mutateAsync({ tabTitle });
+  const createTab = async (
+    tabTitle: string, 
+    tabType?: "script" | "questionnaire",
+    questionnaireScriptName?: string,
+    selectedSectionIds?: string[]
+  ) => {
+    return await createMutation.mutateAsync({ tabTitle, tabType, questionnaireScriptName, selectedSectionIds });
   };
 
   const updateTab = async (tabKey: string, tabTitle: string) => {
     await updateMutation.mutateAsync({ tabKey, tabTitle });
   };
 
-  const deleteTab = async (tabKey: string) => {
-    await deleteMutation.mutateAsync({ tabKey });
+  const deleteTab = async (tabId: number) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab) {
+      await deleteMutation.mutateAsync({ tabKey: tab.tab_key });
+    }
+  };
+
+  // Reorder tabs by updating display_order
+  const reorderTabsMutation = useMutation({
+    mutationFn: async ({ tabIds }: { tabIds: string[] }) => {
+      // Update display_order for each tab based on new order
+      for (let i = 0; i < tabIds.length; i++) {
+        const tab = tabs.find(t => t.tab_key === tabIds[i]);
+        if (tab && tab.id) {
+          await mysqlApi.updateById(TABLE_NAME, tab.id, {
+            display_order: i + 1,
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.scripts.all, "custom_tabs", groupType] });
+      toast.success("Tabs reordered!");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to reorder tabs");
+    },
+  });
+
+  const reorderTabs = async (tabKey: string, newOrder: number) => {
+    // Get all custom tabs sorted by current display_order
+    const sortedTabs = [...tabs].sort((a, b) => a.display_order - b.display_order);
+    const tabIndex = sortedTabs.findIndex(t => t.tab_key === tabKey);
+    if (tabIndex === -1) return;
+    
+    // Remove tab from current position
+    const [movedTab] = sortedTabs.splice(tabIndex, 1);
+    
+    // Calculate the actual new index (accounting for default tabs that come before)
+    // Default tabs typically have display_order 0-1, so custom tabs start from display_order 2+
+    const minCustomOrder = sortedTabs.length > 0 
+      ? Math.min(...sortedTabs.map(t => t.display_order))
+      : newOrder;
+    
+    // Insert at new position
+    sortedTabs.splice(newOrder - minCustomOrder, 0, movedTab);
+    
+    // Update all display orders starting from the minimum order
+    const tabKeys = sortedTabs.map(t => t.tab_key);
+    await reorderTabsMutation.mutateAsync({ tabIds: tabKeys });
+  };
+
+  // Update tab by ID (for use in editor)
+  const updateTabById = async (tabId: number, updates: { tab_title?: string }) => {
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab) {
+      await updateMutation.mutateAsync({ tabKey: tab.tab_key, tabTitle: updates.tab_title || tab.tab_title });
+    }
   };
 
   return {
@@ -146,10 +235,13 @@ export const useCustomTabs = (groupType: "inbound" | "outbound") => {
     isLoading,
     createTab,
     updateTab,
+    updateTabById,
     deleteTab,
+    reorderTabs,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isReordering: reorderTabsMutation.isPending,
     refetch,
   };
 };

@@ -36,12 +36,12 @@ This document provides a comprehensive review of:
 - `src/components/FloatingCallHeader.tsx` - Loads `debug_mode`
 - `src/pages/Index.tsx` - Saves `settings_access_level`
 
-#### **Database (homebound_app_settings)**
+#### **Database (tmdebt_app_settings)**
 **Purpose**: Persistent, cross-device settings storage
 
 **Table Schema**:
 ```sql
-CREATE TABLE `homebound_app_settings` (
+CREATE TABLE `tmdebt_app_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `setting_key` varchar(255) NOT NULL,
   `setting_value` text NOT NULL,
@@ -267,12 +267,12 @@ export const QUERY_KEYS = {
 - **Upsert**: 4 components
 
 **Tables Accessed**:
-- `homebound_script` - 5 components
-- `homebound_list_id_config` - 4 components
-- `homebound_qualification_form_fields` - 3 components
-- `homebound_zapier_settings` - 2 components
-- `homebound_app_settings` - 1 component (migration utility)
-- `homebound_user_groups` - 1 component
+- `tmdebt_script` - 5 components
+- `tmdebt_list_id_config` - 4 components
+- `tmdebt_qualification_form_fields` - 3 components
+- `tmdebt_zapier_settings` - 2 components
+- `tmdebt_app_settings` - 1 component (migration utility)
+- `tmdebt_user_groups` - 1 component
 
 **Request Frequency** (estimated per session):
 - Initial page load: ~10-15 requests
@@ -287,39 +287,39 @@ export const QUERY_KEYS = {
 
 ### 3.1 Database Tables
 
-#### **Required Tables** (all with `homebound_` prefix)
+#### **Required Tables** (all with `tmdebt_` prefix)
 
-1. **homebound_script**
+1. **tmdebt_script**
    - **Purpose**: Call script content for different steps
    - **Key Fields**: `step_name` (unique), `title`, `content`, `button_config`
    - **Used By**: ScriptEditor, ScriptDisplay
    - **Indexes**: `step_name` (unique), `idx_step_name`
 
-2. **homebound_list_id_config**
+2. **tmdebt_list_id_config**
    - **Purpose**: List ID-specific script overrides
    - **Key Fields**: `list_id`, `step_name`, `name`, `content`
    - **Used By**: ListIdConfiguration, ListIdScriptEditor, ScriptDisplay
    - **Indexes**: `unique_list_step` (list_id, step_name), `idx_list_id`, `idx_step_name`
 
-3. **homebound_qualification_form_fields**
+3. **tmdebt_qualification_form_fields**
    - **Purpose**: Dynamic form field definitions
    - **Key Fields**: `field_name` (unique), `field_label`, `field_type`, `field_section`, `field_options`
    - **Used By**: QualificationFormSettings, QualificationForm, useQualificationFields
    - **Indexes**: `field_name` (unique), `idx_field_section`, `idx_display_order`, `idx_is_active`
 
-4. **homebound_user_groups**
+4. **tmdebt_user_groups**
    - **Purpose**: User group assignments (inbound/outbound)
    - **Key Fields**: `user_identifier` (unique), `group_type`
    - **Used By**: GroupContext
    - **Indexes**: `user_identifier` (unique), `idx_user_identifier`, `idx_group_type`
 
-5. **homebound_zapier_settings**
+5. **tmdebt_zapier_settings**
    - **Purpose**: Zapier webhook configurations
    - **Key Fields**: `webhook_url` (unique), `webhook_name`, `is_active`
    - **Used By**: ZapierSettings, useZapier
    - **Indexes**: `webhook_url` (unique), `idx_is_active`
 
-6. **homebound_app_settings**
+6. **tmdebt_app_settings**
    - **Purpose**: Application-wide settings (key-value store)
    - **Key Fields**: `setting_key` (unique), `setting_value`, `setting_type`
    - **Used By**: migration.ts (getAppSetting, setAppSetting)
@@ -328,26 +328,26 @@ export const QUERY_KEYS = {
 ### 3.2 Table Relationships
 
 ```
-homebound_script
+tmdebt_script
   └─> Default scripts (greeting, qualification, etc.)
 
-homebound_list_id_config
+tmdebt_list_id_config
   └─> Overrides for specific list_ids
-      └─> References: homebound_script (by step_name)
+      └─> References: tmdebt_script (by step_name)
 
-homebound_qualification_form_fields
+tmdebt_qualification_form_fields
   └─> Form field definitions
       └─> Used by: QualificationForm (renders fields)
 
-homebound_user_groups
+tmdebt_user_groups
   └─> User assignments
       └─> Determines: inbound vs outbound scripts
 
-homebound_zapier_settings
+tmdebt_zapier_settings
   └─> Webhook configurations
       └─> Used by: QualificationForm (on submit)
 
-homebound_app_settings
+tmdebt_app_settings
   └─> Key-value settings store
       └─> Stores: debug_mode, drafts, etc.
 ```
@@ -356,19 +356,19 @@ homebound_app_settings
 
 #### **Legacy Table Names**
 **Problem**: SQL file (`dynamicscript.sql`) still uses old table names:
-- `list_id_config` (should be `homebound_list_id_config`)
-- `qualification_form_fields` (should be `homebound_qualification_form_fields`)
-- `user_groups` (should be `homebound_user_groups`)
-- `zapier_settings` (should be `homebound_zapier_settings`)
+- `list_id_config` (should be `tmdebt_list_id_config`)
+- `qualification_form_fields` (should be `tmdebt_qualification_form_fields`)
+- `user_groups` (should be `tmdebt_user_groups`)
+- `zapier_settings` (should be `tmdebt_zapier_settings`)
 
 **Impact**:
 - ⚠️ Import script may create wrong tables
 - ⚠️ Backward compatibility maintained in `api/api.php` whitelist
 
-**Recommendation**: Update `dynamicscript.sql` to use `homebound_` prefix
+**Recommendation**: Update `dynamicscript.sql` to use `tmdebt_` prefix
 
 #### **Missing Table**
-**Problem**: `homebound_app_settings` not in `dynamicscript.sql`
+**Problem**: `tmdebt_app_settings` not in `dynamicscript.sql`
 
 **Impact**:
 - ⚠️ Settings migration may fail if table doesn't exist
@@ -384,8 +384,8 @@ homebound_app_settings
 - ✅ Indexes on frequently queried fields (`step_name`, `list_id`, `field_section`, etc.)
 
 **Missing Indexes** (potential optimizations):
-- ⚠️ `homebound_app_settings.setting_type` - Has index but may need composite index
-- ⚠️ `homebound_list_id_config.list_id` - Has index, but composite with `step_name` might help
+- ⚠️ `tmdebt_app_settings.setting_type` - Has index but may need composite index
+- ⚠️ `tmdebt_list_id_config.list_id` - Has index, but composite with `step_name` might help
 
 ---
 
@@ -490,8 +490,8 @@ homebound_app_settings
 - Create enum or const object:
   ```typescript
   export const TABLES = {
-    SCRIPT: 'homebound_script',
-    LIST_ID_CONFIG: 'homebound_list_id_config',
+    SCRIPT: 'tmdebt_script',
+    LIST_ID_CONFIG: 'tmdebt_list_id_config',
     // ...
   } as const;
   ```
@@ -506,7 +506,7 @@ homebound_app_settings
 - ✅ Unified API endpoint
 - ✅ React Query integration (mostly complete)
 - ✅ Cache invalidation working
-- ✅ Consistent table naming (`homebound_` prefix)
+- ✅ Consistent table naming (`tmdebt_` prefix)
 - ✅ Migration utility exists
 
 **Weaknesses**:

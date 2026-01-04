@@ -39,7 +39,7 @@ export const ImportData = () => {
   // Load config from localStorage
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('mysql_config');
+      const saved = localStorage.getItem('tmdebt_mysql_config');
       if (saved) {
         const parsed = JSON.parse(saved);
         setConfig({ ...DEFAULT_MYSQL_CONFIG, ...parsed });

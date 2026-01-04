@@ -8,6 +8,7 @@ import { useScriptSubmissions } from "@/hooks/useScriptSubmissions";
 import { useVICI } from "@/contexts/VICIContext";
 import { replaceScriptVariables } from "@/lib/vici-parser";
 import { saveUserSpielSelection, logUserAction, getUserSpielSettings, getUserId, setUserSpielDefault } from "@/lib/userHistory";
+import { isManagerUserSync } from "@/lib/managerUtils";
 import { toast } from "sonner";
 import {
   Tooltip,
@@ -58,6 +59,8 @@ export const ObjectionDisplay = ({ content, stepName, accentColor = "border-ambe
   const hasRestoredRef = useRef(false);
   const hasLoggedViewRef = useRef(false);
   const isUserCyclingRef = useRef(false); // Track if user is actively cycling
+  const prevIndexRef = useRef<number>(0); // Track previous index to prevent loops
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Debounce API calls
   const [defaultIndex, setDefaultIndex] = useState<number | null>(null);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   
@@ -264,18 +267,38 @@ export const ObjectionDisplay = ({ content, stepName, accentColor = "border-ambe
   }, [unifiedList.length, stepName, leadData]);
   
   // Validate and adjust index when unifiedList changes (e.g., alternatives added/removed)
+  // Removed currentIndex from dependencies to prevent loops
   useEffect(() => {
     if (unifiedList.length > 0 && currentIndex >= unifiedList.length) {
       const validIndex = unifiedList.length - 1;
-      setCurrentIndex(validIndex);
-      // Save corrected index to database
-      const userId = getUserId(leadData);
-      if (userId) {
-        saveUserSpielSelection(leadData, stepName, validIndex, unifiedList.length)
-          .catch(err => console.error('Error saving adjusted objection selection:', err));
+      
+      // Only update if index actually changed to prevent loops
+      if (prevIndexRef.current !== validIndex) {
+        setCurrentIndex(validIndex);
+        prevIndexRef.current = validIndex;
+        
+        // Debounce the API call to prevent spam
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+        }
+        
+        const userId = getUserId(leadData);
+        if (userId) {
+          saveTimeoutRef.current = setTimeout(() => {
+            saveUserSpielSelection(leadData, stepName, validIndex, unifiedList.length)
+              .catch(err => console.error('Error saving adjusted objection selection:', err));
+          }, 500); // 500ms debounce
+        }
       }
     }
-  }, [unifiedList.length, currentIndex, leadData, stepName]);
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [unifiedList.length, leadData, stepName]); // Removed currentIndex to prevent loops
 
   // Safe current index
   const safeIndex = unifiedList.length > 0 ? currentIndex % unifiedList.length : 0;
@@ -447,6 +470,30 @@ export const ObjectionDisplay = ({ content, stepName, accentColor = "border-ambe
 
   const displayText = currentItem ? replaceScriptVariables(currentItem.text, leadData) : "";
   const isStandardUser = currentUserId === '001'; // Hide edit/delete for standard user
+  const isAdmin = currentUserId === '000'; // Admin user can edit all
+  const isManager = useMemo(() => {
+    // Use manager check (sync version for immediate UI decisions)
+    return isManagerUserSync(currentUserId);
+  }, [currentUserId]);
+  
+  // Determine if edit should be shown for current item
+  // Show edit if:
+  // 1. User is admin (000) or manager
+  // 2. User is the owner/creator of the script/spiel (for submissions, check submitted_by)
+  // Hide by default for alternatives and original scripts (since we can't track creator in tmdebt_objection_alts)
+  const canEdit = useMemo(() => {
+    if (isAdmin || isManager) return true; // Admin and manager can always edit
+    if (!currentUserId) return false; // No user logged in, hide edit
+    
+    // For submissions, check if user is the submitter
+    if (currentItem?.isSubmission && currentItem?.submittedBy) {
+      return currentItem.submittedBy === currentUserId;
+    }
+    
+    // For alternatives and original scripts, hide by default (no creator tracking)
+    // Only admin/manager can edit these
+    return false;
+  }, [isAdmin, isManager, currentUserId, currentItem]);
 
   return (
     <TooltipProvider>
@@ -461,7 +508,7 @@ export const ObjectionDisplay = ({ content, stepName, accentColor = "border-ambe
           </Badge>
           
           {/* Action icons */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 group">
             {unifiedList.length > 1 && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -478,60 +525,79 @@ export const ObjectionDisplay = ({ content, stepName, accentColor = "border-ambe
               </Tooltip>
             )}
             
-            {/* Edit button - hidden for standard user (001) */}
-            {!isStandardUser && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={handleStartEdit}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{currentItem?.isOriginal ? 'Create alternative' : 'Edit'}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            {/* Edit button - always visible, greyed out if no permission */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={`p-1 transition-colors ${
+                    canEdit 
+                      ? "text-muted-foreground hover:text-foreground cursor-pointer" 
+                      : "text-muted-foreground/30 cursor-not-allowed opacity-50"
+                  }`}
+                  onClick={canEdit ? handleStartEdit : undefined}
+                  disabled={!canEdit}
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{canEdit ? (currentItem?.isOriginal ? 'Create alternative' : 'Edit') : 'No permission to edit'}</p>
+              </TooltipContent>
+            </Tooltip>
             
-            {/* Add script button - available for all logged-in users */}
-            {currentUserId && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-1 text-muted-foreground hover:text-blue-600 transition-colors"
-                    onClick={() => {
-                      setIsAdding(true);
-                      setNewAltText("");
-                    }}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Add script (saves as your default)</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            {/* Add script button - always visible, greyed out if not logged in */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={`p-1 transition-colors ${
+                    currentUserId 
+                      ? "text-muted-foreground hover:text-blue-600 cursor-pointer" 
+                      : "text-muted-foreground/30 cursor-not-allowed opacity-50"
+                  }`}
+                  onClick={currentUserId ? () => {
+                    setIsAdding(true);
+                    setNewAltText("");
+                  } : undefined}
+                  disabled={!currentUserId}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{currentUserId ? 'Add script (saves as your default)' : 'Please log in to add script'}</p>
+              </TooltipContent>
+            </Tooltip>
             
-            {/* Set as default icon - only show if current objection is not already default */}
-            {defaultIndex !== safeIndex && getUserId(leadData) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-1 text-muted-foreground hover:text-green-600 transition-colors"
-                    onClick={() => handleSetDefault(safeIndex)}
-                    disabled={isSettingDefault}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Set as default</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
+            {/* Set as default icon - always visible, greyed out if no permission or already default */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={`p-1 transition-all ${
+                    defaultIndex === safeIndex
+                      ? "text-muted-foreground/30 cursor-not-allowed opacity-50"
+                      : getUserId(leadData)
+                        ? (isEditing || isAdding)
+                          ? "text-muted-foreground hover:text-green-600 cursor-pointer opacity-100"
+                          : "text-muted-foreground hover:text-green-600 cursor-pointer opacity-0 group-hover:opacity-100"
+                        : "text-muted-foreground/30 cursor-not-allowed opacity-50"
+                  }`}
+                  onClick={defaultIndex !== safeIndex && getUserId(leadData) ? () => handleSetDefault(safeIndex) : undefined}
+                  disabled={isSettingDefault || defaultIndex === safeIndex || !getUserId(leadData)}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {defaultIndex === safeIndex 
+                    ? 'Already set as default' 
+                    : !getUserId(leadData)
+                      ? 'Please log in to set default'
+                      : 'Set as default'
+                  }
+                </p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 

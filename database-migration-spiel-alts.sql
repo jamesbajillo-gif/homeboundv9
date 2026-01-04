@@ -1,7 +1,7 @@
 -- Migration: Add spiel alternatives table for greeting and closing scripts
 -- This mirrors the objection alternatives pattern
 
-CREATE TABLE IF NOT EXISTS homebound_spiel_alts (
+CREATE TABLE IF NOT EXISTS tmdebt_spiel_alts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   script_name VARCHAR(100) NOT NULL COMMENT 'e.g., inbound_greeting, outbound_closingSuccess',
   spiel_id VARCHAR(100) NOT NULL COMMENT 'Identifier for the base spiel, e.g., spiel_0',
@@ -13,4 +13,4 @@ CREATE TABLE IF NOT EXISTS homebound_spiel_alts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Index for faster lookups by script_name
-CREATE INDEX idx_spiel_alts_script ON homebound_spiel_alts(script_name);
+CREATE INDEX idx_spiel_alts_script ON tmdebt_spiel_alts(script_name);

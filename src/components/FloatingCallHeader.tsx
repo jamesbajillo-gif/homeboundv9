@@ -23,14 +23,14 @@ export const FloatingCallHeader = () => {
     const loadDebugMode = async () => {
       try {
         // Try API first, fallback to localStorage
-        const apiDebugMode = await getAppSetting('debug_mode');
-        const localDebugMode = localStorage.getItem('debug_mode');
+        const apiDebugMode = await getAppSetting('tmdebt_debug_mode');
+        const localDebugMode = localStorage.getItem('tmdebt_debug_mode');
         const debugValue = apiDebugMode || localDebugMode || 'false';
         setDebugMode(debugValue === 'true');
       } catch (error) {
         console.error('Error loading debug mode:', error);
         // Fallback to localStorage
-        setDebugMode(localStorage.getItem('debug_mode') === 'true');
+        setDebugMode(localStorage.getItem('tmdebt_debug_mode') === 'true');
       }
     };
 
@@ -38,7 +38,7 @@ export const FloatingCallHeader = () => {
 
     // Listen for debug mode changes from Settings page
     const handleDebugChange = () => {
-      const localDebugMode = localStorage.getItem('debug_mode');
+      const localDebugMode = localStorage.getItem('tmdebt_debug_mode');
       setDebugMode(localDebugMode === 'true');
     };
 
@@ -250,11 +250,11 @@ export const FloatingCallHeader = () => {
               className="h-6 w-6"
               onClick={async () => {
                 try {
-                  await setAppSetting('debug_mode', 'false', 'boolean', 'Debug mode toggle');
+                  await setAppSetting('tmdebt_debug_mode', 'false', 'boolean', 'Debug mode toggle');
                 } catch (error) {
                   console.error('Error saving debug mode:', error);
                 }
-                localStorage.setItem('debug_mode', 'false');
+                localStorage.setItem('tmdebt_debug_mode', 'false');
                 setDebugMode(false);
                 window.dispatchEvent(new Event('debug-mode-change'));
               }}

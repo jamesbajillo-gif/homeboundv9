@@ -14,7 +14,7 @@ export interface ListIdCustomTab {
   updated_at?: string;
 }
 
-const TABLE_NAME = "homebound_listid_custom_tabs";
+const TABLE_NAME = "tmdebt_listid_custom_tabs";
 
 /**
  * Hook to manage custom script tabs for a specific List ID.
@@ -75,7 +75,7 @@ export const useListIdCustomTabs = (listId: string) => {
       });
 
       // Also create the script entry for this tab in list_id_config
-      await mysqlApi.upsertByFields("homebound_list_id_config", {
+      await mysqlApi.upsertByFields("tmdebt_list_id_config", {
         list_id: listId,
         step_name: tabKey,
         name: tabTitle,
@@ -102,7 +102,7 @@ export const useListIdCustomTabs = (listId: string) => {
       });
 
       // Also update the script title
-      await mysqlApi.updateByField("homebound_list_id_config", "step_name", tabKey, {
+      await mysqlApi.updateByField("tmdebt_list_id_config", "step_name", tabKey, {
         title: tabTitle,
         name: tabTitle,
       });

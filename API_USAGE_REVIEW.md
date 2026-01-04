@@ -57,10 +57,10 @@ The application uses a unified MySQL API endpoint (`https://api.techpinoy.net/my
 **Example**:
 ```typescript
 // Read
-const data = await mysqlApi.getAll<FormField>("homebound_qualification_form_fields");
+const data = await mysqlApi.getAll<FormField>("tmdebt_qualification_form_fields");
 
 // Create
-await mysqlApi.create("homebound_script", insertPayload);
+await mysqlApi.create("tmdebt_script", insertPayload);
 
 // Update
 await mysqlApi.updateById("zapier_settings", id, updateData);
@@ -77,7 +77,7 @@ await mysqlApi.deleteById("zapier_settings", id);
 ```typescript
 // Find by single field
 const data = await mysqlApi.findOneByField<ScriptSection>(
-  "homebound_script",
+  "tmdebt_script",
   "step_name",
   stepName
 );
@@ -90,7 +90,7 @@ const data = await mysqlApi.findOneByFields<ScriptData>(
 
 // Find with WHERE IN
 const defaultData = await mysqlApi.findByFieldIn<{...}>(
-  "homebound_script",
+  "tmdebt_script",
   "step_name",
   ["greeting", "qualification", "closing"]
 );
@@ -103,7 +103,7 @@ const defaultData = await mysqlApi.findByFieldIn<{...}>(
 **Example**:
 ```typescript
 await mysqlApi.upsertByFields(
-  "homebound_script",
+  "tmdebt_script",
   payload,
   "step_name" // unique field(s)
 );
@@ -133,7 +133,7 @@ const result = await MySQLTableApiClient.createTables(config, sqlStatements);
 ```
 GET https://api.techpinoy.net/mysqlapi.php?
   action=select&
-  table=homebound_script&
+  table=tmdebt_script&
   sqlhost=167.86.95.115&
   sqlun=dynamicscript&
   sqlpw=dynamicscript&
@@ -256,11 +256,11 @@ GET https://api.techpinoy.net/mysqlapi.php?
 - **Upsert Operations**: 4 components
 
 **By Table**:
-- `homebound_script`: 5 components
-- `homebound_list_id_config`: 4 components
-- `homebound_qualification_form_fields`: 3 components
-- `homebound_zapier_settings`: 2 components
-- `homebound_app_settings`: 1 component (migration utility)
+- `tmdebt_script`: 5 components
+- `tmdebt_list_id_config`: 4 components
+- `tmdebt_qualification_form_fields`: 3 components
+- `tmdebt_zapier_settings`: 2 components
+- `tmdebt_app_settings`: 1 component (migration utility)
 
 ### Request Frequency
 
@@ -394,14 +394,14 @@ await mysqlApi.create(...); // No error handling
 **Problem**: Table names are strings, no type checking
 ```typescript
 // Could be typo
-await mysqlApi.getAll("homebound_scrip"); // Missing 't'
+await mysqlApi.getAll("tmdebt_scrip"); // Missing 't'
 ```
 
 **Recommendation**: Create enum or const object
 ```typescript
 const TABLES = {
-  SCRIPT: 'homebound_script',
-  LIST_ID_CONFIG: 'homebound_list_id_config',
+  SCRIPT: 'tmdebt_script',
+  LIST_ID_CONFIG: 'tmdebt_list_id_config',
   // ...
 } as const;
 ```

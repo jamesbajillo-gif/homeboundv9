@@ -2,7 +2,7 @@
 -- Date: 2026-01-01
 -- Description: Stores user-submitted scripts that can be approved to become globally available
 
-CREATE TABLE IF NOT EXISTS `homebound_script_submissions` (
+CREATE TABLE IF NOT EXISTS `tmdebt_script_submissions` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `script_name` VARCHAR(100) NOT NULL COMMENT 'e.g., inbound_greeting, outbound_closingSuccess',
   `spiel_id` VARCHAR(100) NOT NULL COMMENT 'Identifier for the base spiel, e.g., spiel_0',

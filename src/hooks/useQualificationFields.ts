@@ -23,7 +23,7 @@ export const useQualificationFields = () => {
     queryKey: QUERY_KEYS.formFields.active,
     queryFn: async () => {
       const data = await mysqlApi.getAll<FormField>(
-        'homebound_qualification_form_fields',
+        'tmdebt_qualification_form_fields',
         {
           where: { is_active: true },
           orderBy: 'display_order',

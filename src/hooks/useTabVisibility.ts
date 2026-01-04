@@ -62,6 +62,7 @@ export const useTabVisibility = (groupType: "inbound" | "outbound") => {
   };
 
   // Check if a tab is visible (default to true if not set)
+  // Qualification tabs default to visible but can be toggled
   const isTabVisible = (tabKey: string): boolean => {
     return visibility[tabKey] !== false;
   };

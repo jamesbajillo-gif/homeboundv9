@@ -1,7 +1,7 @@
--- Migration: Add closingSuccess step to homebound_script table
+-- Migration: Add closingSuccess step to tmdebt_script table
 -- Run this in your Supabase SQL Editor to add the missing step
 
-INSERT INTO public.homebound_script (step_name, title, content) 
+INSERT INTO public.tmdebt_script (step_name, title, content) 
 VALUES (
   'closingSuccess', 
   '3b - Closing Spiel (Successful)', 

@@ -41,7 +41,7 @@ export const ZapierSettings = () => {
     is_active: true,
   });
   const [saving, setSaving] = useState(false);
-  const accessLevel = localStorage.getItem('settings_access_level') || 'kainkatae';
+  const accessLevel = localStorage.getItem('tmdebt_settings_access_level') || 'kainkatae';
 
   const queryClient = useQueryClient();
 
@@ -49,7 +49,7 @@ export const ZapierSettings = () => {
   const { data: webhooks = [], isLoading: loading } = useQuery({
     queryKey: QUERY_KEYS.zapier.all,
     queryFn: async () => {
-      const data = await mysqlApi.getAll<ZapierWebhook>("homebound_zapier_settings", {
+      const data = await mysqlApi.getAll<ZapierWebhook>("tmdebt_zapier_settings", {
         orderBy: "created_at",
         order: "DESC"
       });
@@ -122,7 +122,7 @@ export const ZapierSettings = () => {
 
       if (editingWebhook) {
         // Update existing webhook
-        await mysqlApi.updateById("homebound_zapier_settings", editingWebhook.id, {
+        await mysqlApi.updateById("tmdebt_zapier_settings", editingWebhook.id, {
           webhook_url: trimmedUrl,
           webhook_name: formData.webhook_name.trim() || null,
           description: formData.description.trim() || null,
@@ -132,7 +132,7 @@ export const ZapierSettings = () => {
         toast.success("Webhook updated successfully!");
       } else {
         // Add new webhook
-        await mysqlApi.create("homebound_zapier_settings", {
+        await mysqlApi.create("tmdebt_zapier_settings", {
           webhook_url: trimmedUrl,
           webhook_name: formData.webhook_name.trim() || null,
           description: formData.description.trim() || null,
@@ -165,7 +165,7 @@ export const ZapierSettings = () => {
 
     try {
       setSaving(true);
-      await mysqlApi.deleteById("homebound_zapier_settings", id);
+      await mysqlApi.deleteById("tmdebt_zapier_settings", id);
       toast.success("Webhook deleted successfully!");
       // Invalidate cache to refresh all components using webhooks
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.zapier.all });
@@ -180,7 +180,7 @@ export const ZapierSettings = () => {
 
   const handleToggleActive = async (webhook: ZapierWebhook) => {
     try {
-      await mysqlApi.updateById("homebound_zapier_settings", webhook.id, {
+      await mysqlApi.updateById("tmdebt_zapier_settings", webhook.id, {
         is_active: !webhook.is_active
       });
       toast.success(`Webhook ${!webhook.is_active ? 'activated' : 'deactivated'}`);

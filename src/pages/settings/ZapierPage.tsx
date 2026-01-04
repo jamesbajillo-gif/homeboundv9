@@ -9,6 +9,9 @@ const ZapierPage = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Campaign Selector - At the very top */}
+      <SettingsCampaignSelector />
+      
       <div className="flex-none bg-background border-b p-4 sm:p-6 lg:px-8 lg:py-4">
         <div className="max-w-6xl mx-auto flex items-center gap-4">
           <Button

@@ -3,13 +3,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Keyboard, FileText, Settings2, Zap, FormInput, PhoneIncoming, PhoneOutgoing, ListOrdered, Database, Phone, Puzzle } from "lucide-react";
+import { ArrowLeft, Keyboard, FileText, Settings2, Zap, FormInput, PhoneIncoming, PhoneOutgoing, ListOrdered, Database, Phone, Puzzle, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getAppSetting, setAppSetting } from "@/lib/migration";
 import { DEFAULT_DB_CONFIG } from "@/lib/mysqlApi";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { SettingsCampaignSelector } from "@/components/settings/SettingsCampaignSelector";
+
 const Settings = () => {
   const navigate = useNavigate();
   const [debugMode, setDebugMode] = useState(false);
@@ -21,19 +25,19 @@ const Settings = () => {
     const loadSettings = async () => {
       try {
         // Load debug mode from API, fallback to localStorage for backward compatibility
-        const apiDebugMode = await getAppSetting('debug_mode');
-        const localDebugMode = localStorage.getItem('debug_mode');
+        const apiDebugMode = await getAppSetting('tmdebt_debug_mode');
+        const localDebugMode = localStorage.getItem('tmdebt_debug_mode');
         const debugValue = apiDebugMode || localDebugMode || 'false';
         setDebugMode(debugValue === 'true');
 
         // Load access level from localStorage (security-sensitive, keep in localStorage)
-        const localAccessLevel = localStorage.getItem('settings_access_level') || 'kainkatae';
+        const localAccessLevel = localStorage.getItem('tmdebt_settings_access_level') || 'kainkatae';
         setAccessLevel(localAccessLevel);
       } catch (error) {
         console.error('Error loading settings:', error);
         // Fallback to localStorage
-        setDebugMode(localStorage.getItem('debug_mode') === 'true');
-        setAccessLevel(localStorage.getItem('settings_access_level') || 'kainkatae');
+        setDebugMode(localStorage.getItem('tmdebt_debug_mode') === 'true');
+        setAccessLevel(localStorage.getItem('tmdebt_settings_access_level') || 'kainkatae');
       } finally {
         setLoading(false);
       }
@@ -46,8 +50,8 @@ const Settings = () => {
   useEffect(() => {
     const checkShortcuts = async () => {
       try {
-        const hasSeenShortcuts = await getAppSetting('seen_keyboard_shortcuts');
-        const localHasSeen = localStorage.getItem('seen_keyboard_shortcuts');
+        const hasSeenShortcuts = await getAppSetting('tmdebt_seen_keyboard_shortcuts');
+        const localHasSeen = localStorage.getItem('tmdebt_seen_keyboard_shortcuts');
         
         if (!hasSeenShortcuts && !localHasSeen) {
           setTimeout(async () => {
@@ -57,24 +61,24 @@ const Settings = () => {
             });
             // Save to both API and localStorage for backward compatibility
             try {
-              await setAppSetting('seen_keyboard_shortcuts', 'true', 'boolean', 'Whether user has seen keyboard shortcuts');
+              await setAppSetting('tmdebt_seen_keyboard_shortcuts', 'true', 'boolean', 'Whether user has seen keyboard shortcuts');
             } catch (error) {
               console.error('Error saving shortcuts to API:', error);
             }
-            localStorage.setItem('seen_keyboard_shortcuts', 'true');
+            localStorage.setItem('tmdebt_seen_keyboard_shortcuts', 'true');
           }, 500);
         }
       } catch (error) {
         console.error('Error checking shortcuts:', error);
         // Fallback to localStorage
-        const hasSeenShortcuts = localStorage.getItem('seen_keyboard_shortcuts');
+        const hasSeenShortcuts = localStorage.getItem('tmdebt_seen_keyboard_shortcuts');
         if (!hasSeenShortcuts) {
           setTimeout(() => {
             toast.info('Keyboard Shortcuts', {
               description: 'Ctrl+K: Open Settings • Ctrl+S: Save • Ctrl+X: Close',
               duration: 5000,
             });
-            localStorage.setItem('seen_keyboard_shortcuts', 'true');
+            localStorage.setItem('tmdebt_seen_keyboard_shortcuts', 'true');
           }, 500);
         }
       }
@@ -87,13 +91,13 @@ const Settings = () => {
     setDebugMode(checked);
     try {
       // Save to both API and localStorage for backward compatibility
-      await setAppSetting('debug_mode', checked.toString(), 'boolean', 'Debug mode toggle');
-      localStorage.setItem('debug_mode', checked.toString());
+      await setAppSetting('tmdebt_debug_mode', checked.toString(), 'boolean', 'Debug mode toggle');
+      localStorage.setItem('tmdebt_debug_mode', checked.toString());
       window.dispatchEvent(new Event('debug-mode-change'));
     } catch (error) {
       console.error('Error saving debug mode:', error);
       // Fallback to localStorage only
-      localStorage.setItem('debug_mode', checked.toString());
+      localStorage.setItem('tmdebt_debug_mode', checked.toString());
       window.dispatchEvent(new Event('debug-mode-change'));
     }
   };
@@ -154,6 +158,24 @@ const Settings = () => {
           description: "Manage Zapier webhook integrations",
           path: "/settings/zapier"
         },
+        { 
+          name: "Campaign Mapping", 
+          icon: Database,
+          description: "Map campaign variables to campaign prefixes",
+          path: "/settings/campaign-mapping"
+        },
+        { 
+          name: "Campaign Diagnostics", 
+          icon: Database,
+          description: "Diagnose and manage campaign tables and data",
+          path: "/settings/campaign-diagnostics"
+        },
+        { 
+          name: "Admin Configuration", 
+          icon: Shield,
+          description: "Manage admin users with full access across all campaigns",
+          path: "/settings/admin-config"
+        },
       ]
     },
   ];
@@ -170,6 +192,9 @@ const Settings = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Campaign Selector - At the very top */}
+      <SettingsCampaignSelector />
+
       <div className="flex-none bg-background border-b p-4 sm:p-6 lg:px-8 lg:py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">

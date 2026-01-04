@@ -70,7 +70,7 @@ export const ListIdScriptEditorSectioned = ({ listId }: ListIdScriptEditorSectio
         title: string;
         content: string;
       }>(
-        "homebound_list_id_config",
+        "tmdebt_list_id_config",
         {
           list_id: listId,
           step_name: "qualification"
@@ -162,7 +162,7 @@ export const ListIdScriptEditorSectioned = ({ listId }: ListIdScriptEditorSectio
       
       // Fetch existing name to include in payload (required for new inserts)
       const existingRecord = await mysqlApi.findOneByFields<{ name: string }>(
-        "homebound_list_id_config",
+        "tmdebt_list_id_config",
         { list_id: listId }
       );
       
@@ -175,7 +175,7 @@ export const ListIdScriptEditorSectioned = ({ listId }: ListIdScriptEditorSectio
       };
 
       await mysqlApi.upsertByFields(
-        "homebound_list_id_config",
+        "tmdebt_list_id_config",
         payload,
         "list_id,step_name"
       );

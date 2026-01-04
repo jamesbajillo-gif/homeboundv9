@@ -1,7 +1,7 @@
--- Migration: Create homebound_objection_alts table for script-specific objection alternatives
+-- Migration: Create tmdebt_objection_alts table for script-specific objection alternatives
 -- This table stores alternative objection handling responses per script (inbound/outbound/listid)
 
-CREATE TABLE IF NOT EXISTS `homebound_objection_alts` (
+CREATE TABLE IF NOT EXISTS `tmdebt_objection_alts` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `script_name` varchar(100) NOT NULL COMMENT 'Script identifier: inbound_objection, outbound_objection, or listid_{list_id}',
   `objection_id` varchar(100) NOT NULL COMMENT 'Unique identifier for the objection within the script',
@@ -17,5 +17,5 @@ CREATE TABLE IF NOT EXISTS `homebound_objection_alts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Stores script-specific alternative objection handling responses';
 
 -- Example usage:
--- INSERT INTO homebound_objection_alts (script_name, objection_id, alt_text, alt_order) 
+-- INSERT INTO tmdebt_objection_alts (script_name, objection_id, alt_text, alt_order) 
 -- VALUES ('outbound_objection', 'objection_0', 'Alternative response for first objection', 1);

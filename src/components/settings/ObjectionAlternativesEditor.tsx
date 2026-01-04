@@ -36,7 +36,7 @@ interface ParsedObjection {
   lineIndex: number;
 }
 
-const TABLE_NAME = "homebound_objection_alts";
+const TABLE_NAME = "tmdebt_objection_alts";
 
 export const ObjectionAlternativesEditor = ({ 
   scriptName, 

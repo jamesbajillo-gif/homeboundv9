@@ -22,7 +22,7 @@ export interface ScriptSubmission {
   updated_at?: string;
 }
 
-const TABLE_NAME = "homebound_script_submissions";
+const TABLE_NAME = "tmdebt_script_submissions";
 
 /**
  * Hook to manage script submissions

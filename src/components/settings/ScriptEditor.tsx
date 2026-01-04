@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -96,7 +97,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
     queryKey: QUERY_KEYS.scripts.byStep(stepName),
     queryFn: async () => {
       const data = await mysqlApi.findOneByField<ScriptSection>(
-        "homebound_script",
+        "tmdebt_script",
         "step_name",
         stepName
       );
@@ -108,7 +109,9 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
   // Listen for keyboard shortcut save event
   useEffect(() => {
     const handleSaveShortcut = () => {
-      if (!saving && content.trim()) {
+      const isHTMLContent = /<[a-z][\s\S]*>/i.test(content);
+      const hasContent = isHTMLContent ? content : content.trim();
+      if (!saving && hasContent) {
         handleSave();
       }
     };
@@ -214,15 +217,20 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Check if content is HTML (contains HTML tags)
+      const isHTMLContent = /<[a-z][\s\S]*>/i.test(content);
+      // For HTML, preserve the structure; for plain text, trim whitespace
+      const textToSave = isHTMLContent ? content : content.trim();
+      
       console.log("=== SAVE OPERATION START ===");
       console.log("Step name:", stepName);
       console.log("Title to save:", title);
-      console.log("Content to save (first 100 chars):", content.substring(0, 100));
-      console.log("Content length:", content.length);
+      console.log("Content to save (first 100 chars):", textToSave.substring(0, 100));
+      console.log("Content length:", textToSave.length);
       
       // Check if the record exists first
       const existingData = await mysqlApi.findOneByField<ScriptSection>(
-        "homebound_script",
+        "tmdebt_script",
         "step_name",
         stepName
       );
@@ -238,7 +246,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
         // Record exists, update it
         const updatePayload = {
           title,
-          content,
+          content: textToSave,
           // updated_at will be auto-handled by API
         };
         
@@ -249,7 +257,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
         });
         
         await mysqlApi.updateByField(
-          "homebound_script",
+          "tmdebt_script",
           "step_name",
           stepName,
           updatePayload
@@ -261,11 +269,11 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
         const insertPayload = {
           step_name: stepName,
           title,
-          content,
+          content: textToSave,
           button_config: [],
         };
         
-        const insertId = await mysqlApi.create("homebound_script", insertPayload);
+        const insertId = await mysqlApi.create("tmdebt_script", insertPayload);
         console.log("Insert successful, ID:", insertId);
       }
 
@@ -314,14 +322,14 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
       const jsonContent = JSON.stringify(sectionScripts, null, 2);
       
       const existingData = await mysqlApi.findOneByField<ScriptSection>(
-        "homebound_script",
+        "tmdebt_script",
         "step_name",
         stepName
       );
 
       if (existingData) {
         await mysqlApi.updateByField(
-          "homebound_script",
+          "tmdebt_script",
           "step_name",
           stepName,
           {
@@ -330,7 +338,7 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
           }
         );
       } else {
-        await mysqlApi.create("homebound_script", {
+        await mysqlApi.create("tmdebt_script", {
           step_name: stepName,
           title: stepTitle,
           content: jsonContent,
@@ -574,17 +582,21 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
 
             <div>
               <Label htmlFor="content">Script Content</Label>
-              <Textarea
-                id="content"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Enter script content..."
-                className="mt-2 min-h-[300px] font-mono text-sm"
-              />
+              <div className="mt-2">
+                <RichTextEditor
+                  value={content}
+                  onChange={setContent}
+                  placeholder="Enter script content..."
+                  className="min-h-[300px]"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button onClick={handleSave} disabled={saving || !content.trim()}>
+              <Button 
+                onClick={handleSave} 
+                disabled={saving || !content || (!/<[a-z][\s\S]*>/i.test(content) && !content.trim())}
+              >
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create Script
               </Button>
@@ -625,13 +637,14 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
 
           <div>
             <Label htmlFor="content">Script Content</Label>
-            <Textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Enter script content..."
-              className="mt-2 min-h-[300px] max-h-[500px] font-mono text-sm resize-y overflow-y-auto"
-            />
+            <div className="mt-2">
+              <RichTextEditor
+                value={content}
+                onChange={setContent}
+                placeholder="Enter script content..."
+                className="min-h-[300px]"
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -642,7 +655,10 @@ export const ScriptEditor = ({ stepName, stepTitle }: ScriptEditorProps) => {
             >
               Reset
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button 
+              onClick={handleSave} 
+              disabled={saving || !content || (!/<[a-z][\s\S]*>/i.test(content) && !content.trim())}
+            >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>

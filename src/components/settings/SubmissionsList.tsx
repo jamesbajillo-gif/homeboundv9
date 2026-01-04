@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useVICI } from "@/contexts/VICIContext";
 import { getUserId } from "@/lib/userHistory";
 import { QUERY_KEYS } from "@/lib/queryKeys";
+import { isManagerUserSync } from "@/lib/managerUtils";
 
 interface SubmissionsListProps {
   scriptName: string;
@@ -33,7 +34,7 @@ interface ScriptSubmission {
   created_at?: string;
 }
 
-const TABLE_NAME = "homebound_script_submissions";
+const TABLE_NAME = "tmdebt_script_submissions";
 
 // Helper function to format date as MySQL DATETIME (YYYY-MM-DD HH:MM:SS)
 const formatMySQLDateTime = (date: Date): string => {
@@ -51,6 +52,8 @@ export const SubmissionsList = ({ scriptName, submissionType, stepTitle }: Submi
   const queryClient = useQueryClient();
   const currentUserId = getUserId(leadData);
   const isAdmin = currentUserId === '000';
+  const isManager = isManagerUserSync(currentUserId);
+  const canApprove = isAdmin || isManager; // Both admin and manager can approve
 
   // Fetch pending submissions for this script
   const { data: pendingSubmissions = [], isLoading } = useQuery({
@@ -79,15 +82,15 @@ export const SubmissionsList = ({ scriptName, submissionType, stepTitle }: Submi
         return [];
       }
     },
-    enabled: !!scriptName && isAdmin, // Only fetch for admin
+    enabled: !!scriptName && canApprove, // Only fetch for admin/manager
     staleTime: 30000,
   });
 
   // Approve submission mutation
   const approveMutation = useMutation({
     mutationFn: async (submission: ScriptSubmission) => {
-      if (!currentUserId || currentUserId !== '000') {
-        throw new Error("Only admin can approve submissions");
+      if (!currentUserId || !canApprove) {
+        throw new Error("Only admin or manager can approve submissions");
       }
       
       if (!submission.id) {
@@ -96,8 +99,8 @@ export const SubmissionsList = ({ scriptName, submissionType, stepTitle }: Submi
 
       // Determine which alternatives table to use
       const altsTable = submissionType === 'spiel' 
-        ? 'homebound_spiel_alts' 
-        : 'homebound_objection_alts';
+        ? 'tmdebt_spiel_alts' 
+        : 'tmdebt_objection_alts';
       
       // Get the item ID (spiel_id or objection_id)
       const itemId = submissionType === 'spiel' 
@@ -136,8 +139,8 @@ export const SubmissionsList = ({ scriptName, submissionType, stepTitle }: Submi
   // Reject submission mutation
   const rejectMutation = useMutation({
     mutationFn: async ({ submissionId, reason }: { submissionId: number; reason?: string }) => {
-      if (!currentUserId || currentUserId !== '000') {
-        throw new Error("Only admin can reject submissions");
+      if (!currentUserId || !canApprove) {
+        throw new Error("Only admin or manager can reject submissions");
       }
       
       await mysqlApi.updateById(TABLE_NAME, submissionId, {
@@ -166,8 +169,8 @@ export const SubmissionsList = ({ scriptName, submissionType, stepTitle }: Submi
     }
   };
 
-  // Don't show anything if not admin or no pending submissions
-  if (!isAdmin) {
+  // Don't show anything if not admin/manager or no pending submissions
+  if (!canApprove) {
     return null;
   }
 

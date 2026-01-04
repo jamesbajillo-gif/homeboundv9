@@ -40,7 +40,7 @@ interface TableCheckResult {
   message?: string;
 }
 
-const STORAGE_KEY = 'mysql_config';
+const STORAGE_KEY = 'tmdebt_mysql_config';
 
 export const MySQLSettings = () => {
   const [config, setConfig] = useState<MySQLConfig>(DEFAULT_MYSQL_CONFIG);
@@ -254,10 +254,10 @@ export const MySQLSettings = () => {
         {/* Database Prefix Info */}
         <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
           <Badge variant="outline" className="font-mono text-xs">
-            Table Prefix: homebound_
+            Table Prefix: tmdebt_
           </Badge>
           <span className="text-sm text-muted-foreground">
-            All application tables use this prefix (e.g., homebound_script, homebound_app_settings)
+            All application tables use this prefix (e.g., tmdebt_script, tmdebt_app_settings)
           </span>
         </div>
 

@@ -25,14 +25,14 @@ export const ListIdConfiguration = ({ selectedListId, onSelectListId }: ListIdCo
   const [newListId, setNewListId] = useState("");
   const [newName, setNewName] = useState("");
   const queryClient = useQueryClient();
-  const accessLevel = localStorage.getItem('settings_access_level') || 'kainkatae';
+  const accessLevel = localStorage.getItem('tmdebt_settings_access_level') || 'kainkatae';
 
   // Fetch unique list IDs (not individual script steps)
   const { data: listConfigs = [], isLoading } = useQuery({
     queryKey: ["list-id-configs"],
     queryFn: async () => {
       const data = await mysqlApi.getAll<{ list_id: string; name: string }>(
-        "homebound_list_id_config",
+        "tmdebt_list_id_config",
         {
           fields: ["list_id", "name"],
           orderBy: "list_id",
@@ -59,7 +59,7 @@ export const ListIdConfiguration = ({ selectedListId, onSelectListId }: ListIdCo
   const createMutation = useMutation({
     mutationFn: async () => {
       // Use upsert to handle case where list_id + step_name combination already exists
-      await mysqlApi.upsertByFields("homebound_list_id_config", {
+      await mysqlApi.upsertByFields("tmdebt_list_id_config", {
         list_id: newListId,
         name: newName,
         step_name: "greeting",
@@ -86,7 +86,7 @@ export const ListIdConfiguration = ({ selectedListId, onSelectListId }: ListIdCo
   const updateMutation = useMutation({
     mutationFn: async (newName: string) => {
       await mysqlApi.updateByWhere(
-        "homebound_list_id_config",
+        "tmdebt_list_id_config",
         { list_id: selectedListId },
         { name: newName }
       );
@@ -103,7 +103,7 @@ export const ListIdConfiguration = ({ selectedListId, onSelectListId }: ListIdCo
   // Delete List ID (deletes all script steps for this list_id)
   const deleteMutation = useMutation({
     mutationFn: async (listId: string) => {
-      await mysqlApi.deleteByWhere("homebound_list_id_config", { list_id: listId });
+      await mysqlApi.deleteByWhere("tmdebt_list_id_config", { list_id: listId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["list-id-configs"] });

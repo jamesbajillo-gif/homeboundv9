@@ -25,21 +25,28 @@ export async function migrateLocalStorageToAPI(config?: any): Promise<{
   // Use provided config or default API client
   const apiClient = config ? new MySQLApiClient(undefined, config) : new MySQLApiClient();
 
-  // Settings to migrate (excluding mysql_config which should stay in localStorage for security)
+  // Settings to migrate (excluding tmdebt_mysql_config which should stay in localStorage for security)
   const settingsToMigrate: Array<{
     key: string;
     type: 'string' | 'boolean' | 'number' | 'json';
     description?: string;
   }> = [
-    { key: 'debug_mode', type: 'boolean', description: 'Debug mode toggle' },
-    { key: 'settings_access_level', type: 'string', description: 'Settings access password' },
-    { key: 'seen_keyboard_shortcuts', type: 'boolean', description: 'Whether user has seen keyboard shortcuts' },
+    { key: 'tmdebt_debug_mode', type: 'boolean', description: 'Debug mode toggle' },
+    { key: 'tmdebt_settings_access_level', type: 'string', description: 'Settings access password' },
+    { key: 'tmdebt_seen_keyboard_shortcuts', type: 'boolean', description: 'Whether user has seen keyboard shortcuts' },
   ];
 
-  // Migrate each setting
+  // Migrate each setting (check both old and new prefixed keys)
   for (const setting of settingsToMigrate) {
     try {
-      const value = localStorage.getItem(setting.key);
+      // Try new prefixed key first, then fallback to old key for backward compatibility
+      let value = localStorage.getItem(setting.key);
+      if (!value) {
+        // Try old key without prefix (for backward compatibility)
+        const oldKey = setting.key.replace('tmdebt_', '');
+        value = localStorage.getItem(oldKey);
+      }
+      
       if (value !== null) {
         // Convert value based on type
         let settingValue = value;
@@ -50,9 +57,9 @@ export async function migrateLocalStorageToAPI(config?: any): Promise<{
           settingValue = value;
         }
 
-        // Upsert to API
+        // Upsert to API (always use prefixed key)
         await apiClient.upsertByFields(
-          'homebound_app_settings',
+          'tmdebt_app_settings',
           {
             setting_key: setting.key,
             setting_value: settingValue,
@@ -74,7 +81,7 @@ export async function migrateLocalStorageToAPI(config?: any): Promise<{
     const draftKeys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('qualification_form_draft_')) {
+      if (key && (key.startsWith('qualification_form_draft_') || key.startsWith('tmdebt_qualification_form_draft_'))) {
         draftKeys.push(key);
       }
     }
@@ -83,15 +90,17 @@ export async function migrateLocalStorageToAPI(config?: any): Promise<{
       try {
         const value = localStorage.getItem(draftKey);
         if (value) {
-          // Extract listId and groupType from key: qualification_form_draft_{listId}_{groupType}
-          const parts = draftKey.replace('qualification_form_draft_', '').split('_');
+          // Extract listId and groupType from key: tmdebt_qualification_form_draft_{listId}_{groupType}
+          // Support both old and new prefixed keys
+          const normalizedKey = draftKey.startsWith('tmdebt_') ? draftKey : `tmdebt_${draftKey}`;
+          const parts = normalizedKey.replace('tmdebt_qualification_form_draft_', '').split('_');
           const groupType = parts.pop() || 'inbound';
           const listId = parts.join('_') || 'default';
 
           await apiClient.upsertByFields(
-            'homebound_app_settings',
+            'tmdebt_app_settings',
             {
-              setting_key: draftKey,
+              setting_key: normalizedKey,
               setting_value: value,
               setting_type: 'json',
               description: `Qualification form draft for listId: ${listId}, groupType: ${groupType}`,
@@ -123,7 +132,7 @@ export async function getAppSetting(key: string, config?: any): Promise<string |
   try {
     const apiClient = config ? new MySQLApiClient(undefined, config) : new MySQLApiClient();
     const setting = await apiClient.findOneByField<AppSetting>(
-      'homebound_app_settings',
+      'tmdebt_app_settings',
       'setting_key',
       key
     );
@@ -160,7 +169,7 @@ export async function setAppSetting(
 
   const apiClient = config ? new MySQLApiClient(undefined, config) : new MySQLApiClient();
   await apiClient.upsertByFields(
-    'homebound_app_settings',
+    'tmdebt_app_settings',
     {
       setting_key: key,
       setting_value: settingValue,
@@ -178,13 +187,13 @@ export async function deleteAppSetting(key: string, config?: any): Promise<void>
   try {
     const apiClient = config ? new MySQLApiClient(undefined, config) : new MySQLApiClient();
     const setting = await apiClient.findOneByField<{ id: number }>(
-      'homebound_app_settings',
+      'tmdebt_app_settings',
       'setting_key',
       key
     );
 
     if (setting) {
-      await apiClient.deleteById('homebound_app_settings', setting.id);
+      await apiClient.deleteById('tmdebt_app_settings', setting.id);
     }
   } catch (error) {
     console.error(`Error deleting app setting ${key}:`, error);

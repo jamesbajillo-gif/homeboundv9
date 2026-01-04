@@ -36,19 +36,33 @@ interface ScriptQuestionAlt {
   is_default: number;
 }
 
-const STORAGE_KEY_PREFIX = "qualification_script_selected";
+const STORAGE_KEY_PREFIX = "tmdebt_qualification_script_selected";
 
 /**
  * Hook to get the script-specific qualification config.
  * This merges the master config with script-specific selections and database alternatives.
+ * @param overrideScriptName - Optional script name to use instead of deriving from groupType
+ * @param listId - Optional list ID to check for list ID-specific qualification configs
  */
-export const useScriptQualificationConfig = () => {
+export const useScriptQualificationConfig = (overrideScriptName?: string, listId?: string | null) => {
   const { groupType } = useGroup();
   
-  const stepName = groupType === "outbound" ? "outbound_qualification" : "qualification";
-  const scriptName = groupType === "outbound" ? "outbound_qualification" : "inbound_qualification";
-  const storageKey = `${STORAGE_KEY_PREFIX}_${stepName}`;
-  const masterConfigKey = `qualification_config_${groupType}`;
+  // Use override script name if provided, otherwise derive from groupType
+  const scriptName = overrideScriptName || (groupType === "outbound" ? "outbound_qualification" : "inbound_qualification");
+  const stepName = overrideScriptName 
+    ? (overrideScriptName.includes("outbound") ? "outbound_qualification" : "qualification")
+    : (groupType === "outbound" ? "outbound_qualification" : "qualification");
+  
+  // Build storage key - check for list ID-specific config first if listId is provided
+  // List ID configs use a simpler key pattern: listid_${listId} (matches ListIdQualificationSelector)
+  // Fall back to stepName-specific key for default configs
+  const storageKey = listId && listId !== '--A--list_id--B--'
+    ? `tmdebt_qualification_script_selected_listid_${listId}`
+    : `${STORAGE_KEY_PREFIX}_${stepName}`;
+  
+  // Determine group type from script name if override is provided
+  const effectiveGroupType = overrideScriptName?.includes("outbound") ? "outbound" : groupType;
+  const masterConfigKey = `tmdebt_qualification_config_${effectiveGroupType}`;
 
   // Fetch master config
   const { data: masterConfig, isLoading: masterLoading } = useQuery({
@@ -58,7 +72,7 @@ export const useScriptQualificationConfig = () => {
         const configData = await mysqlApi.findOneByField<{
           setting_key: string;
           setting_value: string;
-        }>("homebound_app_settings", "setting_key", masterConfigKey);
+        }>("tmdebt_app_settings", "setting_key", masterConfigKey);
 
         if (configData?.setting_value) {
           const parsed = deserializeConfig(configData.setting_value);
@@ -81,7 +95,7 @@ export const useScriptQualificationConfig = () => {
         const data = await mysqlApi.findOneByField<{
           setting_key: string;
           setting_value: string;
-        }>("homebound_app_settings", "setting_key", storageKey);
+        }>("tmdebt_app_settings", "setting_key", storageKey);
 
         if (data?.setting_value) {
           return JSON.parse(data.setting_value);
@@ -101,7 +115,7 @@ export const useScriptQualificationConfig = () => {
     queryFn: async (): Promise<ScriptQuestionAlt[]> => {
       try {
         const data = await mysqlApi.findByField<ScriptQuestionAlt>(
-          "homebound_script_question_alts",
+          "tmdebt_script_question_alts",
           "script_name",
           scriptName,
           { orderBy: "alt_order", order: "ASC" }

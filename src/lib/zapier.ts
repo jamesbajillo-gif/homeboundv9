@@ -267,7 +267,7 @@ export class ZapierIntegration {
 // Helper function to get active webhooks from database
 export const getActiveWebhooks = async (): Promise<string[]> => {
   try {
-    const data = await mysqlApi.getAll<{ webhook_url: string }>('homebound_zapier_settings', {
+    const data = await mysqlApi.getAll<{ webhook_url: string }>('tmdebt_zapier_settings', {
       where: { is_active: true },
       fields: ['webhook_url']
     });

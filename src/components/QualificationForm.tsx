@@ -2,9 +2,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { useScriptQualificationConfig } from "@/hooks/useScriptQualificationConfig";
 import { useZapier } from "@/hooks/useZapier";
@@ -14,35 +17,62 @@ import { Card } from "@/components/ui/card";
 import { getAppSetting, setAppSetting, deleteAppSetting } from "@/lib/migration";
 import { logUserAction } from "@/lib/userHistory";
 import { QualificationSection, VerifyDialog } from "./qualification";
-import { getEnabledSections, QualificationQuestion } from "@/config/qualificationConfig";
+import { getEnabledSections, QualificationQuestion, QualificationSection as QualificationSectionType } from "@/config/qualificationConfig";
 
 interface QualificationFormProps {
   onComplete?: () => void;
   onSubmitRef?: (submitFn: () => void) => void;
   testMode?: boolean;
+  scriptName?: string; // Optional script name to override default (e.g., for questionnaire tabs)
+  selectedSectionIds?: string[]; // Optional array of section IDs to filter sections
+  listId?: string | null; // Optional list ID for list ID-specific qualification configs
 }
 
-export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }: QualificationFormProps) => {
-  const { config, isLoading: configLoading } = useScriptQualificationConfig();
+export const QualificationForm = ({ 
+  onComplete, 
+  onSubmitRef, 
+  testMode = false, 
+  scriptName,
+  selectedSectionIds,
+  listId
+}: QualificationFormProps) => {
+  const { config, isLoading: configLoading } = useScriptQualificationConfig(scriptName, listId);
+  
+  // Filter config to only show selected sections if provided
+  const filteredConfig = selectedSectionIds && selectedSectionIds.length > 0
+    ? {
+        ...config,
+        sections: config.sections.filter(section => selectedSectionIds.includes(section.id))
+      }
+    : config;
   const { sendToAllActiveWebhooks, loading: zapierLoading } = useZapier();
   const { leadData } = useVICI();
   const { groupType } = useGroup();
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [formData, setFormData] = useState<Record<string, any> | null>(null);
+  
+  // Section visibility toggles (for testMode with selectedSectionIds)
+  const [visibleSections, setVisibleSections] = useState<Set<string>>(() => {
+    // Initialize with all selected sections visible
+    if (selectedSectionIds && selectedSectionIds.length > 0) {
+      return new Set(selectedSectionIds);
+    }
+    return new Set();
+  });
 
   // Memoize enabled questions to prevent infinite loops
   const enabledQuestions = useMemo((): QualificationQuestion[] => {
-    return config.sections
+    return filteredConfig.sections
       .filter(s => s.enabled)
       .flatMap(s => s.questions.filter(q => q.enabled));
-  }, [config]);
+  }, [filteredConfig]);
 
   // Build draft key based on listId and groupType
   const getDraftKey = useCallback(() => {
     const listId = leadData?.list_id && leadData.list_id !== '--A--list_id--B--'
       ? leadData.list_id
       : 'default';
-    return `qualification_form_draft_${listId}_${groupType}`;
+    return `tmdebt_qualification_form_draft_${listId}_${groupType}`;
   }, [leadData?.list_id, groupType]);
 
   // Build dynamic schema from questions - memoized
@@ -299,6 +329,25 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     onSubmitRef(handleVerifyAndSubmit);
   }
 
+  // Get all available sections from the full config (for toggle list)
+  // This hook must be called before any early returns
+  const allSections = useMemo(() => {
+    if (!config || !config.sections) return [];
+    return config.sections.filter(s => s.enabled);
+  }, [config]);
+  
+  // Update visible sections when selectedSectionIds changes
+  // This hook must be called before any early returns
+  useEffect(() => {
+    if (selectedSectionIds && selectedSectionIds.length > 0) {
+      setVisibleSections(new Set(selectedSectionIds));
+    } else if (allSections.length > 0) {
+      // If no selectedSectionIds, show all enabled sections
+      setVisibleSections(new Set(allSections.map(s => s.id)));
+    }
+  }, [selectedSectionIds, allSections]);
+
+  // Early return after all hooks have been called
   if (configLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -307,8 +356,21 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     );
   }
 
-  // Get enabled sections
-  const enabledSections = getEnabledSections(config);
+  // Get enabled sections from filtered config
+  const enabledSections = getEnabledSections(filteredConfig);
+
+  // Toggle section visibility
+  const toggleSection = (sectionId: string) => {
+    setVisibleSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  };
 
   // Show empty state if no questions configured for this script
   if (enabledSections.length === 0 || enabledSections.every(s => s.questions.length === 0)) {
@@ -324,19 +386,71 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
     );
   }
 
+  // Filter sections to only show visible ones
+  const sectionsToDisplay = enabledSections.filter(section => visibleSections.has(section.id));
+
   return (
     <Form {...form}>
       <form className="space-y-6 sm:space-y-8 md:space-y-10">
+        {/* Section Toggle Controls (only show in testMode with selectedSectionIds) */}
+        {testMode && selectedSectionIds && selectedSectionIds.length > 0 && allSections.length > 0 && (
+          <Card className="p-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Display Sections</Label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Toggle sections to show or hide in the questionnaire form
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {allSections
+                  .filter(section => selectedSectionIds.includes(section.id))
+                  .map(section => {
+                    const isVisible = visibleSections.has(section.id);
+                    const questionCount = section.questions.filter(q => q.enabled).length;
+                    return (
+                      <div key={section.id} className="flex items-center space-x-2 p-2 border rounded-md hover:bg-muted/50">
+                        <Checkbox
+                          id={`section-toggle-${section.id}`}
+                          checked={isVisible}
+                          onCheckedChange={() => toggleSection(section.id)}
+                        />
+                        <Label
+                          htmlFor={`section-toggle-${section.id}`}
+                          className="text-sm font-normal cursor-pointer flex-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>{section.title}</span>
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({questionCount} {questionCount === 1 ? 'question' : 'questions'})
+                            </span>
+                          </div>
+                        </Label>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          </Card>
+        )}
+
         <Card className="p-4 sm:p-6 md:p-8 lg:p-10">
-          <div className="space-y-6 sm:space-y-8 md:space-y-10">
-            {enabledSections.map(section => (
-              <QualificationSection
-                key={section.id}
-                section={section}
-                form={form}
-              />
-            ))}
-          </div>
+          {sectionsToDisplay.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No sections are currently visible.</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Use the toggle controls above to show sections.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6 sm:space-y-8 md:space-y-10">
+              {sectionsToDisplay.map(section => (
+                <QualificationSection
+                  key={section.id}
+                  section={section}
+                  form={form}
+                />
+              ))}
+            </div>
+          )}
         </Card>
 
         {testMode && (
@@ -353,7 +467,7 @@ export const QualificationForm = ({ onComplete, onSubmitRef, testMode = false }:
         onOpenChange={setShowVerifyDialog}
         onConfirm={handleConfirmSubmit}
         formData={formData}
-        config={config}
+        config={filteredConfig}
         testMode={testMode}
         isSubmitting={zapierLoading}
       />

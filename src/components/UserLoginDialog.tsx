@@ -23,9 +23,9 @@ interface UserLoginDialogProps {
 
 // Password to user mapping
 const PASSWORD_TO_USER: Record<string, string> = {
-  "kainkatae": "000",      // Admin user
-  "operation": "021",     // Operation user
-  "test": "001",          // Default/standard user
+  "kainkatae": "000",      // Admin user - Full access
+  "operation": "021",      // Manager user - Manager access (edit, approve, add scripts/tabs)
+  "test": "001",           // Agent user - Standard/agent access
 };
 
 export const UserLoginDialog = ({ open, onOpenChange, onSuccess }: UserLoginDialogProps) => {

@@ -30,7 +30,7 @@ const Index = () => {
         open={passwordDialogOpen}
         onOpenChange={setPasswordDialogOpen}
         onSuccess={(password) => {
-          localStorage.setItem('settings_access_level', password);
+          localStorage.setItem('tmdebt_settings_access_level', password);
           navigate('/settings');
         }}
       />

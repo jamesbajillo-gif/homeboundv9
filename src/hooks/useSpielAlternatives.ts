@@ -14,7 +14,7 @@ export interface SpielAlternative {
   is_default: number;
 }
 
-const TABLE_NAME = "homebound_spiel_alts";
+const TABLE_NAME = "tmdebt_spiel_alts";
 
 /**
  * Hook to manage spiel alternatives for greeting and closing scripts.

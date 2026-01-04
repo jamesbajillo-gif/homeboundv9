@@ -6,12 +6,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, ListOrdered, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ListIdConfiguration } from "@/components/settings/ListIdConfiguration";
+import { SettingsCampaignSelector } from "@/components/settings/SettingsCampaignSelector";
 import { SpielListEditor } from "@/components/settings/SpielListEditor";
-import { ObjectionListEditor } from "@/components/settings/ObjectionListEditor";
-import { ListIdQualificationSelector } from "@/components/settings/ListIdQualificationSelector";
 import { AddTabDialog } from "@/components/settings/AddTabDialog";
 import { SortableTab } from "@/components/settings/SortableTab";
 import { CopyFromGroupDialog } from "@/components/settings/CopyFromGroupDialog";
+import { CopyFromListIdDialog } from "@/components/settings/CopyFromListIdDialog";
+import { QualificationScriptSelector } from "@/components/settings/QualificationScriptSelector";
+import { toast } from "sonner";
 import { useListIdTabVisibility } from "@/hooks/useListIdTabVisibility";
 import { useListIdTabOrder } from "@/hooks/useListIdTabOrder";
 import { useListIdCustomTabs } from "@/hooks/useListIdCustomTabs";
@@ -64,13 +66,10 @@ const ListIdManagement = () => {
     isDeleting 
   } = useListIdCustomTabs(selectedListId);
 
-  // Fixed tabs
+  // Fixed tabs - qualification is always included by default
   const fixedTabs = [
     { key: "greeting", title: "Greeting", stepName: "greeting" },
-    { key: "qualification", title: "Qualification", stepName: "qualification" },
-    { key: "objectionHandling", title: "Objections", stepName: "objectionHandling" },
-    { key: "closingNotInterested", title: "Not Interested", stepName: "closingNotInterested" },
-    { key: "closingSuccess", title: "Success", stepName: "closingSuccess" },
+    { key: "qualification", title: "Qualification", stepName: "qualification", isQuestionnaire: true },
   ];
 
   // Combine and order all tabs
@@ -144,6 +143,9 @@ const ListIdManagement = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Campaign Selector - At the very top */}
+      <SettingsCampaignSelector />
+      
       <div className="flex-none bg-background border-b p-4 sm:p-6 lg:px-8 lg:py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -160,6 +162,15 @@ const ListIdManagement = () => {
             <div className="flex items-center gap-2">
               <CopyFromGroupDialog 
                 listId={selectedListId} 
+                onCopyComplete={() => {
+                  queryClient.invalidateQueries({ queryKey: ["list-script", selectedListId] });
+                  queryClient.invalidateQueries({ queryKey: ["listid_tab_visibility", selectedListId] });
+                  queryClient.invalidateQueries({ queryKey: ["listid_tab_order", selectedListId] });
+                  queryClient.invalidateQueries({ queryKey: ["listid_custom_tabs", selectedListId] });
+                }}
+              />
+              <CopyFromListIdDialog 
+                targetListId={selectedListId} 
                 onCopyComplete={() => {
                   queryClient.invalidateQueries({ queryKey: ["list-script", selectedListId] });
                   queryClient.invalidateQueries({ queryKey: ["listid_tab_visibility", selectedListId] });
@@ -242,31 +253,9 @@ const ListIdManagement = () => {
                   </TabsContent>
 
                   <TabsContent value="qualification" className="mt-6">
-                    <ListIdQualificationSelector
-                      listId={selectedListId}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="objectionHandling" className="mt-6">
-                    <ObjectionListEditor
-                      stepName="objectionHandling"
-                      stepTitle="Common Objections"
-                      listId={selectedListId}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="closingNotInterested" className="mt-6">
-                    <SpielListEditor
-                      stepName="closingNotInterested"
-                      stepTitle="Closing - Not Interested"
-                      listId={selectedListId}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="closingSuccess" className="mt-6">
-                    <SpielListEditor
-                      stepName="closingSuccess"
-                      stepTitle="Closing - Successful"
+                    <QualificationScriptSelector 
+                      stepName="qualification"
+                      stepTitle="Qualification Form"
                       listId={selectedListId}
                     />
                   </TabsContent>

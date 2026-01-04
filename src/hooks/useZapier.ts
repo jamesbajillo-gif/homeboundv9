@@ -54,7 +54,7 @@ export const useZapier = (options: UseZapierOptions = {}) => {
         webhook_url: string;
         webhook_name: string | null;
         is_active: boolean;
-      }>('homebound_zapier_settings', {
+      }>('tmdebt_zapier_settings', {
         where: { is_active: true }
       });
 

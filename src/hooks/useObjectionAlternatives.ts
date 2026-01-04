@@ -13,7 +13,7 @@ export interface ObjectionAlternative {
   is_default: number;
 }
 
-const TABLE_NAME = "homebound_objection_alts";
+const TABLE_NAME = "tmdebt_objection_alts";
 
 /**
  * Hook to manage objection handling alternatives.

@@ -11,7 +11,7 @@ import {
   convertLegacyScriptsToConfig,
 } from '@/config/qualificationConfig';
 
-const CONFIG_KEY_PREFIX = 'qualification_config';
+const CONFIG_KEY_PREFIX = 'tmdebt_qualification_config';
 
 export const useQualificationConfig = () => {
   const { groupType } = useGroup();
@@ -25,7 +25,7 @@ export const useQualificationConfig = () => {
       try {
         // First try to load from new config format using correct column names
         const configData = await mysqlApi.findOneByField<{ setting_key: string; setting_value: string }>(
-          'homebound_app_settings',
+          'tmdebt_app_settings',
           'setting_key',
           configKey
         );
@@ -40,7 +40,7 @@ export const useQualificationConfig = () => {
         // Fallback: Try to load from legacy script format and convert
         const stepName = groupType === 'outbound' ? 'outbound_qualification' : 'qualification';
         const legacyData = await mysqlApi.findOneByField<{ step_name: string; content: string }>(
-          'homebound_script',
+          'tmdebt_script',
           'step_name',
           stepName
         );
@@ -70,7 +70,7 @@ export const useQualificationConfig = () => {
       const serialized = serializeConfig(newConfig);
       
       // Use upsert for cleaner save - will insert or update based on setting_key uniqueness
-      await mysqlApi.upsertByFields('homebound_app_settings', {
+      await mysqlApi.upsertByFields('tmdebt_app_settings', {
         setting_key: configKey,
         setting_value: serialized,
         setting_type: 'json',

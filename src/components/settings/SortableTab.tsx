@@ -1,10 +1,9 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Pencil, Trash2, Check, X } from "lucide-react";
+import { GripVertical, Pencil, Trash2, Check, X, Copy } from "lucide-react";
 import { TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface SortableTabProps {
@@ -21,6 +20,7 @@ interface SortableTabProps {
   onCancelEdit?: () => void;
   onDelete?: () => void;
   isCustomTab?: boolean;
+  onDuplicate?: () => void;
 }
 
 export function SortableTab({
@@ -37,6 +37,7 @@ export function SortableTab({
   onCancelEdit,
   onDelete,
   isCustomTab,
+  onDuplicate,
 }: SortableTabProps) {
   const {
     attributes,
@@ -64,14 +65,22 @@ export function SortableTab({
         isDragging && "opacity-50 shadow-lg"
       )}
     >
-      <button
+      <div
         {...attributes}
         {...listeners}
         className="cursor-grab active:cursor-grabbing p-0.5 hover:bg-muted rounded touch-none"
         onClick={(e) => e.stopPropagation()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
       >
         <GripVertical className="h-3 w-3 text-muted-foreground" />
-      </button>
+      </div>
       
       <Checkbox
         checked={isVisible}
@@ -93,38 +102,109 @@ export function SortableTab({
               if (e.key === "Escape") onCancelEdit?.();
             }}
           />
-          <Button size="icon" variant="ghost" className="h-5 w-5 p-0" onClick={onSaveEdit}>
+          <div
+            className="h-5 w-5 p-0 inline-flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSaveEdit?.();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                onSaveEdit?.();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+          >
             <Check className="h-3 w-3" />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-5 w-5 p-0" onClick={onCancelEdit}>
+          </div>
+          <div
+            className="h-5 w-5 p-0 inline-flex items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCancelEdit?.();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancelEdit?.();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+          >
             <X className="h-3 w-3" />
-          </Button>
+          </div>
         </div>
       ) : (
         <>
           {title}
-          {isCustomTab && (
-            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                className="p-0.5 hover:bg-muted rounded"
-                onClick={(e) => {
+          <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Edit button - available for all tabs */}
+            <div
+              className="p-0.5 hover:bg-muted rounded cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartEdit?.();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
                   e.stopPropagation();
                   onStartEdit?.();
-                }}
-              >
-                <Pencil className="h-3 w-3" />
-              </button>
-              <button
-                className="p-0.5 hover:bg-destructive/20 rounded text-destructive"
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <Pencil className="h-3 w-3" />
+            </div>
+            {/* Duplicate button - for qualification tab */}
+            {onDuplicate && (
+              <div
+                className="p-0.5 hover:bg-muted rounded cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDelete?.();
+                  onDuplicate();
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDuplicate();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <Copy className="h-3 w-3" />
+              </div>
+            )}
+            {/* Delete button - only for custom tabs */}
+            {isCustomTab && onDelete && (
+              <div
+                className="p-0.5 hover:bg-destructive/20 rounded text-destructive cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDelete();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <Trash2 className="h-3 w-3" />
-              </button>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </>
       )}
     </TabsTrigger>

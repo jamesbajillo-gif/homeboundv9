@@ -177,7 +177,7 @@
 
 ```sql
 SELECT user_id, action, spiels_settings, created_at 
-FROM homebound_users 
+FROM tmdebt_users 
 WHERE user_id = '000' 
 ORDER BY created_at DESC 
 LIMIT 1;

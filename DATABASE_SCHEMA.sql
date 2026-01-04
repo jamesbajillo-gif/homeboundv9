@@ -1,11 +1,11 @@
 -- ============================================
 -- MySQL Database Schema for Dynamic Script App
 -- Create these tables in your MySQL database
--- All tables use the homebound_ prefix for consistency
+-- All tables use the tmdebt_ prefix for consistency
 -- ============================================
 
 -- 1. Scripts Table
-CREATE TABLE IF NOT EXISTS homebound_script (
+CREATE TABLE IF NOT EXISTS tmdebt_script (
     id INT AUTO_INCREMENT PRIMARY KEY,
     step_name VARCHAR(100) NOT NULL UNIQUE,
     title VARCHAR(255) NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS homebound_script (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. Qualification Form Fields Table
-CREATE TABLE IF NOT EXISTS homebound_qualification_form_fields (
+CREATE TABLE IF NOT EXISTS tmdebt_qualification_form_fields (
     id INT AUTO_INCREMENT PRIMARY KEY,
     field_name VARCHAR(100) NOT NULL UNIQUE,
     field_label VARCHAR(255) NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS homebound_qualification_form_fields (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. Zapier Settings Table
-CREATE TABLE IF NOT EXISTS homebound_zapier_settings (
+CREATE TABLE IF NOT EXISTS tmdebt_zapier_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     webhook_url VARCHAR(500) NOT NULL UNIQUE,
     webhook_name VARCHAR(255) DEFAULT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS homebound_zapier_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 4. User Groups Table
-CREATE TABLE IF NOT EXISTS homebound_user_groups (
+CREATE TABLE IF NOT EXISTS tmdebt_user_groups (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_identifier VARCHAR(100) NOT NULL UNIQUE,
     group_type ENUM('inbound', 'outbound') NOT NULL DEFAULT 'inbound',
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS homebound_user_groups (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 5. List ID Configuration Table
-CREATE TABLE IF NOT EXISTS homebound_list_id_config (
+CREATE TABLE IF NOT EXISTS tmdebt_list_id_config (
     id INT AUTO_INCREMENT PRIMARY KEY,
     list_id VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS homebound_list_id_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 6. App Settings Table (for localStorage migration)
-CREATE TABLE IF NOT EXISTS homebound_app_settings (
+CREATE TABLE IF NOT EXISTS tmdebt_app_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     setting_key VARCHAR(255) NOT NULL UNIQUE,
     setting_value TEXT,
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS homebound_app_settings (
 -- ============================================
 
 -- Sample inbound scripts
-INSERT INTO homebound_script (step_name, title, content, button_config) VALUES
+INSERT INTO tmdebt_script (step_name, title, content, button_config) VALUES
 ('greeting', 'Opening Spiel', 'Hello! Thank you for calling. My name is [Agent Name]. How may I help you today?', '[]'),
 ('qualification', 'Qualification', 'I would like to ask you a few questions to better assist you.', '[]'),
 ('objectionHandling', 'Objection Handling', 'I understand your concern. Let me address that...', '[]'),
@@ -94,7 +94,7 @@ INSERT INTO homebound_script (step_name, title, content, button_config) VALUES
 ('closingSuccess', 'Closing - Success', 'Great! I am glad we could help you today. Is there anything else?', '[]');
 
 -- Sample outbound scripts
-INSERT INTO homebound_script (step_name, title, content, button_config) VALUES
+INSERT INTO tmdebt_script (step_name, title, content, button_config) VALUES
 ('outbound_greeting', 'Outbound Opening', 'Hello! This is [Agent Name] calling from [Company]. Am I speaking with [Customer Name]?', '[]'),
 ('outbound_qualification', 'Outbound Qualification', 'I am reaching out because we have an exciting opportunity for you.', '[]'),
 ('outbound_objection', 'Outbound Objection Handling', 'I completely understand. Many of our customers felt the same way before...', '[]'),

@@ -16,7 +16,7 @@
 
 ### Table Schema
 ```sql
-CREATE TABLE `homebound_list_id_config` (
+CREATE TABLE `tmdebt_list_id_config` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `list_id` varchar(255) NOT NULL,
   `name` varchar(255) NOT NULL,
@@ -138,10 +138,10 @@ result.data?.inserted_ids  // In data property
 **Change**:
 ```typescript
 // Before
-await mysqlApi.create("homebound_list_id_config", { ... });
+await mysqlApi.create("tmdebt_list_id_config", { ... });
 
 // After
-await mysqlApi.upsertByFields("homebound_list_id_config", { ... });
+await mysqlApi.upsertByFields("tmdebt_list_id_config", { ... });
 ```
 
 **Benefits**:

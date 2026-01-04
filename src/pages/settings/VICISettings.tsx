@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useState, useEffect, useMemo } from "react";
 import { VICILeadData } from "@/lib/vici-parser";
+import { SettingsCampaignSelector } from "@/components/settings/SettingsCampaignSelector";
 
 // All possible VICI parameters organized by category
 const VICI_PARAMETERS = {
@@ -87,7 +88,7 @@ interface CustomFieldRecord {
   usage_count: number;
 }
 
-const STORAGE_KEY = 'vici_custom_fields';
+const STORAGE_KEY = 'tmdebt_vici_custom_fields';
 
 export default function VICISettings() {
   const navigate = useNavigate();
@@ -189,6 +190,9 @@ export default function VICISettings() {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Campaign Selector - At the very top */}
+      <SettingsCampaignSelector />
+      
       <div className="flex-none bg-background border-b p-4 sm:p-6 lg:px-8 lg:py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">

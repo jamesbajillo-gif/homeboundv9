@@ -19,13 +19,13 @@ export interface ImportResult {
  * Parse SQL INSERT statements from SQL file content
  */
 function parseSQLInserts(sqlContent: string): {
-  homebound_script: any[];
+  tmdebt_script: any[];
   list_id_config: any[];
   qualification_form_fields: any[];
   zapier_settings: any[];
 } {
   const result = {
-    homebound_script: [] as any[],
+    tmdebt_script: [] as any[],
     list_id_config: [] as any[],
     qualification_form_fields: [] as any[],
     zapier_settings: [] as any[],
@@ -42,8 +42,8 @@ function parseSQLInserts(sqlContent: string): {
     // Parse VALUES - handle multi-row inserts
     const rows = parseValues(valuesString);
 
-    if (tableName === 'homebound_script' || tableName === 'script') {
-      result.homebound_script.push(...rows);
+    if (tableName === 'tmdebt_script' || tableName === 'script' || tableName === 'tmdebt_script') {
+      result.tmdebt_script.push(...rows);
     } else if (tableName === 'list_id_config') {
       result.list_id_config.push(...rows);
     } else if (tableName === 'qualification_form_fields') {
@@ -144,7 +144,7 @@ function parseRowValues(valuesStr: string): string[] {
  * Convert parsed SQL values to API payload format
  */
 function convertScriptRow(values: string[]): any {
-  // homebound_script: id, step_name, title, content, button_config, created_at, updated_at
+  // tmdebt_script: id, step_name, title, content, button_config, created_at, updated_at
   if (values.length >= 4) {
     return {
       step_name: unquote(values[1]),
@@ -242,12 +242,12 @@ export async function importFromSQL(
     const parsed = parseSQLInserts(sqlContent);
 
     // Import scripts
-    for (const row of parsed.homebound_script) {
+    for (const row of parsed.tmdebt_script) {
       try {
         const payload = convertScriptRow(row.values);
         if (payload) {
           await apiClient.upsertByFields(
-            'homebound_script',
+            'tmdebt_script',
             payload,
             'step_name'
           );
@@ -264,7 +264,7 @@ export async function importFromSQL(
         const payload = convertListIdConfigRow(row.values);
         if (payload) {
           await apiClient.upsertByFields(
-            'homebound_list_id_config',
+            'tmdebt_list_id_config',
             payload,
             'list_id,step_name'
           );
@@ -281,7 +281,7 @@ export async function importFromSQL(
         const payload = convertFormFieldRow(row.values);
         if (payload) {
           await apiClient.upsertByFields(
-            'homebound_qualification_form_fields',
+            'tmdebt_qualification_form_fields',
             payload,
             'field_name'
           );
@@ -298,7 +298,7 @@ export async function importFromSQL(
         const payload = convertZapierSettingsRow(row.values);
         if (payload) {
           await apiClient.upsertByFields(
-            'homebound_zapier_settings',
+            'tmdebt_zapier_settings',
             payload,
             'webhook_url'
           );

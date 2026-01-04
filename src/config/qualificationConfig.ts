@@ -21,7 +21,7 @@ export interface QualificationQuestion {
   question: string; // Primary/default question text
   alternatives?: QuestionVariant[]; // Alternative phrasings
   selectionMode?: 'default' | 'random'; // How to choose between alternatives
-  fieldName: string | null; // Maps to homebound_qualification_form_fields.field_name
+  fieldName: string | null; // Maps to tmdebt_qualification_form_fields.field_name
   enabled: boolean;
   order: number;
   // Inline field configuration
@@ -47,7 +47,7 @@ export interface QualificationConfig {
 }
 
 // Default configuration - these questions match the existing DEFAULT_SCRIPTS structure
-// and map directly to database fields in homebound_qualification_form_fields
+// and map directly to database fields in tmdebt_qualification_form_fields
 export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
   version: "1.0.0",
   sections: [

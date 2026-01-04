@@ -5,7 +5,7 @@
 -- Table to store script-specific question alternatives
 -- These override or extend the master question configuration for specific scripts
 
-CREATE TABLE IF NOT EXISTS `homebound_script_question_alts` (
+CREATE TABLE IF NOT EXISTS `tmdebt_script_question_alts` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `script_name` varchar(50) NOT NULL COMMENT 'Script identifier: inbound_qualification, outbound_qualification, etc.',
   `question_id` varchar(100) NOT NULL COMMENT 'Reference to the question ID from qualification config',
@@ -21,5 +21,5 @@ CREATE TABLE IF NOT EXISTS `homebound_script_question_alts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Script-specific question alternatives';
 
 -- Example usage:
--- INSERT INTO homebound_script_question_alts (script_name, question_id, alt_text, alt_order, is_default)
+-- INSERT INTO tmdebt_script_question_alts (script_name, question_id, alt_text, alt_order, is_default)
 -- VALUES ('outbound_qualification', 'property_type', 'Can you tell me what kind of property this is?', 1, 0);

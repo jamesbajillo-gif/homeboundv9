@@ -1,4 +1,4 @@
-CREATE TABLE `homebound_script` (
+CREATE TABLE `tmdebt_script` (
   `id` int(11) NOT NULL,
   `step_name` varchar(255) NOT NULL,
   `title` text NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE `homebound_script` (
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `homebound_script` (`id`, `step_name`, `title`, `content`, `button_config`, `created_at`, `updated_at`) VALUES
+INSERT INTO `tmdebt_script` (`id`, `step_name`, `title`, `content`, `button_config`, `created_at`, `updated_at`) VALUES
 (1, 'greeting', '1 - Opening Greeting', '\"Good [morning/afternoon/evening], this is [Your Name] calling from [Company Name]. Am I speaking with [Customer Name]?\"\r\n\r\n[Wait for confirmation]\r\n\r\n\"Great! How are you doing today?\"\r\n\r\n[Brief acknowledgment]\r\n\r\n\"I appreciate you taking my call. I\'m reaching out today because...\"', NULL, '2025-12-15 01:41:48', '2025-12-15 13:47:06'),
 (2, 'objectionHandling', '1a - Common Objections', '\"I\'m not interested\"\n-> \"I understand. May I ask what specifically doesn\'t interest you? That way I can make sure I\'m not wasting your time.\"\n\n\"Send me information\"\n-> \"I\'d be happy to! To make sure I send you the most relevant information, can I ask you a few quick questions?\"\n\n\"I need to think about it\"\n-> \"Of course, this is an important decision. What specific aspects would you like to think about? Maybe I can help clarify those now.\"', NULL, '2025-12-15 01:41:48', '2025-12-15 01:41:48'),
 (3, 'qualification', '2 - Qualification Questions', '1. \"Can you tell me a bit about your current [solution/process]?\"\n\n2. \"What challenges are you facing with [specific area]?\"\n\n3. \"Have you considered making any changes in the near future?\"\n\n4. \"Who else in your organization would be involved in this decision?\"', NULL, '2025-12-15 01:41:48', '2025-12-15 01:41:48'),
@@ -100,7 +100,7 @@ INSERT INTO `zapier_settings` (`id`, `webhook_url`, `webhook_name`, `description
 (3, 'WEBHOOK_URL_1', 'WEBHOOK_NAME_1', 'DESCRIPTION_1', 1, '2025-12-15 14:36:27', '2025-12-15 14:36:27'),
 (4, 'WEBHOOK_URL_2', 'WEBHOOK_NAME_2', 'DESCRIPTION_2', 1, '2025-12-15 14:36:27', '2025-12-15 14:36:27');
 
-ALTER TABLE `homebound_script`
+ALTER TABLE `tmdebt_script`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `step_name` (`step_name`),
   ADD KEY `idx_step_name` (`step_name`);
@@ -129,7 +129,7 @@ ALTER TABLE `zapier_settings`
   ADD UNIQUE KEY `webhook_url` (`webhook_url`),
   ADD KEY `idx_is_active` (`is_active`);
 
-ALTER TABLE `homebound_script`
+ALTER TABLE `tmdebt_script`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 ALTER TABLE `list_id_config`
